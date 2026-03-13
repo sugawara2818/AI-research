@@ -68,9 +68,8 @@ class NewsResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
-        current_date_str = datetime.now().strftime("%Y-%m-%d")
-        # Inject today's date to force fresh AI tool and model news
-        search_query = f"{current_date_str} {query} new AI tools models research releases"
+        # Broaden search to recent trends (weekly/recent) instead of strictly 'today'
+        search_query = f"latest AI tools models research releases this week {query}"
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key, 
@@ -87,21 +86,21 @@ class NewsResearcher:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
 あなたは世界最先端のAI技術リサーチアナリストです。
-以下の検索結果から、本日（{current_date_str}）時点で「最も技術的価値が高く、かつ最新の」AI動向を3つ厳選し、冷徹に分析してください。
+以下の検索結果から、直近（ここ1週間〜1ヶ月以内）で「最も技術的価値が高く、かつ最新の」AI動向を3つ厳選し、冷静に分析してください。
 
-【厳守：情報の鮮度ダブルチェック】
-1. **日付の死守**: 検索結果が「数ヶ月前」や「去年」のものでないか厳格に確認してください。今日（{current_date_str}）周辺の発表、あるいは今週起きた出来事のみを「最新」として扱ってください。
-2. **技術的ファクトのみを抽出**: 誇大広告（ハイプ）を排し、実装方法、パラメータ数、ベンチマーク結果、ライセンス体系などの「硬い情報」を優先してください。
-3. **リソースの特定**: 関連するGitHubリポジトリ、Hugging Faceモデル、公式論文、開発者のXアカウントを必ず特定してください。
+【リサーチ基準】
+1. **鮮度の確認**: 検索結果が古すぎないか（数ヶ月以上前でないか）確認してください。直近の発表や、最近注目されている出来事を優先してください。
+2. **技術的ファクトの重視**: 実装方法、パラメータ数、ベンチマーク結果、ライセンス体系などの「硬い情報」を優先してください。
+3. **リソースの特定**: 関連するGitHubリポジトリ、Hugging Faceモデル、公式論文、開発者のXアカウントを特定してください。
 
-「なんとなく凄そう」なまとめは不要です。エンジニアが明日から使える、あるいは警戒すべき「生きた情報」のみを出力してください。
+「なんとなく凄そう」なものではなく、エンジニアが活用できる「生きた情報」のみを出力してください。
 """
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception(f"AIリサーチフェーズで失敗しました。本日({current_date_str})の最新情報を取得できません。")
+        raise Exception(f"AIリサーチフェーズで失敗しました。最新の情報を取得できません。")
 
 class NewsReporter:
     def __init__(self):
