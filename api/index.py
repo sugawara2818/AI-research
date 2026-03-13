@@ -13,8 +13,7 @@ from google.api_core import exceptions
 import google.generativeai as genai
 import requests
 
-# Diagnostics: Print sys.path and installed modules
-print(f"Python version: {sys.version}")
+# Diagnostics: Print version
 try:
     import fastapi
     print(f"FastAPI version: {fastapi.__version__}")
@@ -30,13 +29,11 @@ class Researcher:
         self.tavily_key = os.getenv("TAVILY_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=self.gemini_key)
-        # Use models confirmed by diagnostics
+        # 2026-specific models confirmed by diagnostics
         self.models_to_try = [
-            "models/gemini-2.0-flash", 
-            "models/gemini-1.5-flash", 
-            "models/gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-pro"
+            "models/gemini-2.5-flash", 
+            "models/gemini-2.0-flash-exp", 
+            "models/gemini-1.5-flash"
         ]
         self.model = genai.GenerativeModel(self.models_to_try[0])
 
@@ -80,16 +77,14 @@ class Researcher:
                     response = self.model.generate_content(prompt)
                     return response.text
                 except exceptions.NotFound as e:
-                    error_details.append(f"{model_name}: NotFound - {str(e)}")
+                    error_details.append(f"{model_name}: NotFound")
                     break 
                 except exceptions.ResourceExhausted as e:
-                    error_details.append(f"{model_name}: QuotaExceeded - {str(e)}")
+                    error_details.append(f"{model_name}: QuotaExceeded")
                     if attempt == 1: break 
-                    print(f"Gemini {model_name} Quota hit, waiting 30s...")
                     time.sleep(30)
                 except Exception as e:
-                    error_details.append(f"{model_name}: Error - {str(e)}")
-                    if model_name == self.models_to_try[-1]: break
+                    error_details.append(f"{model_name}: {str(e)[:50]}")
                     break
         
         failure_summary = " | ".join(error_details)
@@ -98,7 +93,11 @@ class Researcher:
 class Reporter:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+        self.models_to_try = [
+            "models/gemini-2.5-flash", 
+            "models/gemini-2.0-flash-exp", 
+            "models/gemini-1.5-flash"
+        ]
         self.model = genai.GenerativeModel(self.models_to_try[0])
 
     def generate_report(self, facts: str) -> str:
@@ -128,15 +127,15 @@ class Reporter:
                     self.model = genai.GenerativeModel(model_name)
                     response = self.model.generate_content(prompt)
                     return response.text
-                except exceptions.NotFound as e:
+                except exceptions.NotFound:
                     error_details.append(f"{model_name}: NotFound")
                     break
-                except exceptions.ResourceExhausted as e:
+                except exceptions.ResourceExhausted:
                     error_details.append(f"{model_name}: Quota")
                     if attempt == 1: break
                     time.sleep(30)
                 except Exception as e:
-                    error_details.append(f"{model_name}: {str(e)}")
+                    error_details.append(f"{model_name}: {str(e)[:50]}")
                     break
         raise Exception(f"Reporter failed. Details: {' | '.join(error_details)}")
 
@@ -177,18 +176,10 @@ def perform_research_and_notify():
     try:
         try:
             researcher = Researcher()
-            try:
-                results = researcher.search_news()
-            except Exception as e:
-                raise Exception(f"【Tavily検索エラー】: {str(e)}")
-            
-            try:
-                facts = researcher.filter_and_extract_facts(results)
-            except Exception as e:
-                raise Exception(f"【Gemini抽出エラー】: {str(e)}")
+            results = researcher.search_news()
+            facts = researcher.filter_and_extract_facts(results)
         except Exception as e:
-            # Re-raise to be caught by the outer block
-            raise e
+            raise Exception(f"【検索/抽出エラー】: {str(e)}")
 
         try:
             reporter = Reporter()
@@ -270,11 +261,9 @@ def handle_message(event):
             event.reply_token, 
             TextSendMessage(text="了解しました！リサーチを開始します。結果は後ほどこのチャットに送ります。（約1〜2分かかります）")
         )
-        # Prevent blocking the webhook response
         if current_bg_tasks:
             current_bg_tasks.add_task(perform_research_and_notify)
         else:
-            # Fallback for sync environments
             import threading
             threading.Thread(target=perform_research_and_notify).start()
     else:
