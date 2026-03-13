@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/webhook.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/webhook",
+      "dest": "api/webhook.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/webhook/cron",
+      "schedule": "0 0 * * 1"
+    }
+  ]
+}
