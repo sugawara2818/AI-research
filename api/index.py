@@ -8,7 +8,11 @@ from typing import List, Dict, Optional
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+    TemplateSendMessage, ButtonsTemplate, MessageAction,
+    QuickReply, QuickReplyButton
+)
 from google.api_core import exceptions
 import google.generativeai as genai
 import requests
@@ -267,7 +271,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
         if is_stock_code or is_general_request or any(k in msg for k in ["株", "銘柄", "分析", "決算", "いくら"]):
             if is_general_request:
                 target_name = "市場全体（マクロ概況）"
-                display_name = "市場全体の概況と注目銘柄"
+                display_name = "市場全体の主要トピック"
             elif is_stock_code:
                 target_name = f"銘柄コード {msg}"
                 display_name = f"銘柄コード {msg}"
@@ -278,7 +282,13 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
 
             line_bot_api.reply_message(
                 event.reply_token, 
-                TextSendMessage(text=f"「{display_name}」について、プロの視点で分析レポートを作成します！1〜2分ほどお待ちください📈")
+                TextSendMessage(
+                    text=f"「{display_name}」について、プロの分析レポートを作成します！1〜2分ほどお待ちください📈",
+                    quick_reply=QuickReply(items=[
+                        QuickReplyButton(action=MessageAction(label="市場の概況レポート", text="レポートお願い")),
+                        QuickReplyButton(action=MessageAction(label="投資戦略の相談", text="投資相談に乗って"))
+                    ])
+                )
             )
             background_tasks.add_task(run_stock_flow, target_name, uid)
             
@@ -286,7 +296,18 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="投資戦略のアドバイスを用意します。"))
             background_tasks.add_task(run_stock_consultation, msg, uid)
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="銘柄分析や投資相談をどうぞ！"))
+            buttons_template = ButtonsTemplate(
+                title='株式投資・市場分析AI',
+                text='4桁のコードを入力するか、ボタンからレポートをリクエストできます。',
+                actions=[
+                    MessageAction(label='市場の概況レポート', text='レポートお願い'),
+                    MessageAction(label='投資戦略の相談', text='投資相談に乗って'),
+                ]
+            )
+            line_bot_api.reply_message(
+                event.reply_token,
+                TemplateSendMessage(alt_text='メニューを選択してください', template=buttons_template)
+            )
 
     try:
         line_handler.handle(body, signature)
