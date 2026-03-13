@@ -254,11 +254,20 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
     
     @line_handler.add(MessageEvent, message=TextMessage)
     def handle_stock(event):
-        msg = event.message.text
+        msg = event.message.text.strip()
         uid = event.source.user_id
-        if any(k in msg for k in ["株", "銘柄", "分析", "決算"]):
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"「{msg}」を詳しく分析します！📈"))
-            background_tasks.add_task(run_stock_flow, msg, uid)
+        
+        # Check for 4-digit stock codes (e.g., 7203) or keywords
+        is_stock_code = msg.isdigit() and len(msg) == 4
+        
+        if is_stock_code or any(k in msg for k in ["株", "銘柄", "分析", "決算", "いくら"]):
+            target_name = f"銘柄コード {msg}" if is_stock_code else msg
+            line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=f"「{target_name}」をプロの視点で分析します！少々お待ちください📈")
+            )
+            background_tasks.add_task(run_stock_flow, target_name, uid)
+            
         elif any(k in msg for k in ["相談", "投資", "買い", "売り"]):
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="投資戦略のアドバイスを用意します。"))
             background_tasks.add_task(run_stock_consultation, msg, uid)
