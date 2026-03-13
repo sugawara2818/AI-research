@@ -104,14 +104,18 @@ class StockResearcher:
 
     def search_stock_news(self, query: str) -> List[Dict]:
         print(f"Searching stock info for: {query}")
-        # Expand search to include macro factors and world news
-        search_query = f"{query} 株価 マクロ経済 世界情勢 決算 注目銘柄 stock price macro economy geopolitical earnings outlook"
+        # Build a more aggressive query for macro and geopolitical risks
+        # Especially targeting energy and conflict areas which are often missed
+        search_query = (
+            f"{query} 株価 決算 業績 マクロ経済 世界情勢 地政学リスク 原油 中東 ウクライナ "
+            f"stock market macro geopolitical risk oil price conflict Middle East earnings"
+        )
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key,
             "query": search_query,
             "search_depth": "advanced",
-            "max_results": 7 # Increased for broader context
+            "max_results": 10 # Increase to ensure broad coverage
         }
         res = requests.post(url, json=payload)
         res.raise_for_status()
@@ -120,18 +124,20 @@ class StockResearcher:
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは伝説的な投資戦略家（ストラテジスト）です。以下の検索結果に基づき、銘柄「{query}」に関連する情報だけでなく、それを包囲する「世界情勢・マクロ経済」の視点を含めて、多角的な分析を行なってください。
+あなたは世界情勢と金融市場の繋がりを読み解く伝説のストラテジストです。
+以下の検索結果に基づき、銘柄「{query}」や市場全体を揺るがす「地政学的地殻変動」を逃さず分析してください。
 
 【検索結果】
 {context}
 
-【分析の必須要件】
-1. **世界情勢・マクロ環境**: 米国金利、インフレ、地政学リスク、原油価格、為替動向など、ターゲット銘柄に影響を与える外部環境を整理してください。
-2. **多角的な見解**: 単一の結論ではなく、強気派・弱気派それぞれの視点や、市場の様々な思惑を抽出してください。
-3. **個別銘柄分析**: 業績、決算、財務指標、競争優位性を鋭く評価してください。
-4. **注目銘柄・セクターの提示**: 客観的データに基づき、現在の環境下で「特に注目すべき関連銘柄やセクター」を具体的に挙げてください。
+【分析の厳守事項】
+1. **地政学・国際情勢の激震**: イラン、中東情勢、ウクライナ、米中関係など、市場が「リスク」として認識している現在進行形の紛争や緊張を必ず反映してください。
+2. **エネルギー・資源価格**: 原油価格、天然ガス、ゴールド等の動きが、ターゲット銘柄や世界経済にどう波及しているか。
+3. **金利とインフレの相関**: マクロ経済の基礎要因を整理してください。
+4. **多角的な結末予想**: 楽観シナリオと、一気に冷え込む悲観シナリオの両方を提示してください。
+5. **注目セクター・銘柄**: この地政学的リスクを「回避」または「利用」できる注目先を具体的に挙げてください。
 
-客観性を保ちつつも、投資家が「次の一手」を判断できるような鋭いインサイトを出力してください。挨拶は不要です。
+「イラン情勢への言及がない」といった見落としは致命的です。世界地図を俯瞰するような鋭いインサイトを優先してください。
 """
         for model_name in self.models_to_try:
             try:
