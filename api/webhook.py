@@ -12,14 +12,15 @@ load_dotenv()
 
 app = FastAPI()
 
-# Helper to get LINE API instances safely
-def get_line_api():
-    token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-    secret = os.getenv("LINE_CHANNEL_SECRET")
-    if not token or not secret:
-        print(f"ERROR: Missing LINE credentials. Token: {'set' if token else 'empty'}, Secret: {'set' if secret else 'empty'}")
-        return None, None
-    return LineBotApi(token), WebhookHandler(secret)
+# Handle environment variables safely
+channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+channel_secret = os.getenv("LINE_CHANNEL_SECRET")
+
+# Initialize LINE API objects
+# If credentials are missing, we use dummy values to prevent startup crash, 
+# but subsequent calls will fail (logged in the health check)
+line_bot_api = LineBotApi(channel_access_token or "dummy_token")
+handler = WebhookHandler(channel_secret or "dummy_secret")
 
 def perform_research_and_notify():
     """Shared logic for both interactive commands and cron jobs"""
@@ -69,12 +70,11 @@ async def webhook(request: Request):
         print("Error: Missing X-Line-Signature header")
         raise HTTPException(status_code=400, detail="Missing signature")
     
+    if not channel_access_token or not channel_secret:
+        print("Error: LINE credentials not set in Vercel environment")
+        raise HTTPException(status_code=500, detail="Server configuration error: Missing LINE keys")
+
     body = (await request.body()).decode("utf-8")
-    line_bot_api, handler = get_line_api()
-    
-    if not handler:
-        print("Error: LINE handler could not be initialized")
-        raise HTTPException(status_code=500, detail="Server configuration error")
     
     try:
         handler.handle(body, signature)
@@ -82,7 +82,7 @@ async def webhook(request: Request):
         print("Error: Invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
-        print(f"Unexpected error in handler: {e}")
+        print(f"Unexpected error in handler: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
     return "OK"
