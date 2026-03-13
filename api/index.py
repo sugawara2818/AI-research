@@ -67,9 +67,10 @@ class NewsResearcher:
         genai.configure(api_key=self.gemini_key)
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
-    def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
-        # Broaden search to recent trends (weekly/recent) instead of strictly 'today'
-        search_query = f"latest AI tools models research releases this week {query}"
+    def search_news(self, query: Optional[str] = None) -> List[Dict]:
+        base_query = query if query else "latest AI technology trends and research 2024-2025"
+        # Broaden search to recent trends (weekly/recent)
+        search_query = f"latest AI tools models research releases this week {base_query}"
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key, 
@@ -81,19 +82,22 @@ class NewsResearcher:
         res.raise_for_status()
         return res.json().get('results', [])
 
-    def filter_and_extract_facts(self, search_results: List[Dict]) -> str:
+    def filter_and_extract_facts(self, search_results: List[Dict], query: Optional[str] = None) -> str:
         current_date_str = datetime.now().strftime("%Y年%m月%d日")
+        topic_label = f"「{query}」" if query else "全般"
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
 あなたは世界最先端のAI技術リサーチアナリストです。
-以下の検索結果から、直近（ここ1週間〜1ヶ月以内）で「最も技術的価値が高く、かつ最新の」AI動向を3つ厳選し、冷静に分析してください。
+ターゲット：{topic_label} に関するAI動向。
 
-【リサーチ基準】
-1. **鮮度の確認**: 検索結果が古すぎないか（数ヶ月以上前でないか）確認してください。直近の発表や、最近注目されている出来事を優先してください。
-2. **技術的ファクトの重視**: 実装方法、パラメータ数、ベンチマーク結果、ライセンス体系などの「硬い情報」を優先してください。
-3. **リソースの特定**: 関連するGitHubリポジトリ、Hugging Faceモデル、公式論文、開発者のXアカウントを特定してください。
+以下の検索結果から、直近（ここ1週間〜1ヶ月以内）の「最も技術的価値が高く、かつ最新の」情報を3つ厳選し、冷静に分析してください。
 
-「なんとなく凄そう」なものではなく、エンジニアが活用できる「生きた情報」のみを出力してください。
+【厳守：情報の二重検証（ダブルチェック）】
+1. **鮮度の照合**: 検索結果の日時を確認し、現在のトレンド（本日：{current_date_str}）と乖離がないか確認してください。古い情報は「最新」として扱わず、もし情報が古い場合はその旨を指摘するか、より新しい情報を優先してください。
+2. **トピックの適合性**: 指示されたテーマ「{topic_label}」に合致しているか再確認してください。関係のないAIニュースはノイズとして排除してください。
+3. **技術的ファクトの死守**: 実装、ベンチマーク、ライセンス、URLなどの「硬い情報」を優先してください。
+
+「なんとなく」の要約は不要です。エンジニアに役立つ「生きたインテリジェンス」のみを出力してください。
 """
         for model_name in self.models_to_try:
             try:
@@ -304,8 +308,12 @@ async def news_webhook(request: Request, background_tasks: BackgroundTasks):
     
     @line_handler.add(MessageEvent, message=TextMessage)
     def handle_news(event):
-        msg = event.message.text
+        msg = event.message.text.strip()
         uid = event.source.user_id
+        
+        # Check for specific instruction: "Something about Something"
+        summary_match = re.search(r"(.+)(について|についてまとめて|を調べて|をリサーチ)", msg)
+        
         if any(k in msg for k in ["キャンセル", "中止", "やめて"]):
             CANCEL_LOG[uid] = time.time()
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="リサーチを中断（非表示）しました。"))
@@ -313,12 +321,18 @@ async def news_webhook(request: Request, background_tasks: BackgroundTasks):
             if uid in CANCEL_LOG: del CANCEL_LOG[uid]
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="検討を開始します…"))
             background_tasks.add_task(run_news_consultation, msg, uid)
-        elif any(k in msg for k in ["ニュース", "リサーチ", "教えて"]):
+        elif summary_match or any(k in msg for k in ["ニュース", "リサーチ", "教えて"]):
             if uid in CANCEL_LOG: del CANCEL_LOG[uid]
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースをリサーチします！"))
-            background_tasks.add_task(run_news_flow, uid)
+            query = summary_match.group(1).strip() if summary_match else None
+            display_theme = query if query else "最新AIニュース"
+            
+            line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=f"「{display_theme}」を二重検証（ダブルチェック）してリサーチします！少々お待ちください。🤖")
+            )
+            background_tasks.add_task(run_news_flow, uid, query)
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースや開発の相談をどうぞ！"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースや具体的なテーマの調査依頼をどうぞ！例：「画像生成AIについてまとめて」"))
 
     try:
         line_handler.handle(body, signature)
