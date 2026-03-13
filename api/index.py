@@ -30,7 +30,7 @@ class Researcher:
         self.tavily_key = os.getenv("TAVILY_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=self.gemini_key)
-        self.model = genai.GenerativeModel("gemini-flash-latest")
+        self.model = genai.GenerativeModel("gemini-1.5-flash")
 
     def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
         print(f"Searching for: {query}")
@@ -77,7 +77,7 @@ class Researcher:
 class Reporter:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("gemini-flash-latest")
+        self.model = genai.GenerativeModel("gemini-1.5-flash")
 
     def generate_report(self, facts: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
