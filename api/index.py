@@ -143,20 +143,32 @@ current_bg_tasks = None
 
 def perform_research_and_notify():
     print("Background flow: Starting research...")
+    notifier = Notifier()
     try:
-        researcher = Researcher()
-        results = researcher.search_news()
-        facts = researcher.filter_and_extract_facts(results)
-        reporter = Reporter()
-        report = reporter.generate_report(facts)
-        notifier = Notifier()
-        notifier.send_line_notification(report)
+        try:
+            researcher = Researcher()
+            results = researcher.search_news()
+            facts = researcher.filter_and_extract_facts(results)
+        except Exception as e:
+            raise Exception(f"【検索/分析エラー】: {str(e)}")
+
+        try:
+            reporter = Reporter()
+            report = reporter.generate_report(facts)
+        except Exception as e:
+            raise Exception(f"【レポート生成エラー】: {str(e)}")
+
+        try:
+            notifier.send_line_notification(report)
+        except Exception as e:
+            raise Exception(f"【LINE送信エラー】: {str(e)}")
+
         print("Background flow: Finished successfully.")
     except Exception as e:
-        print(f"Background flow error: {e}")
+        error_msg = f"システムの実行中にエラーが発生しました:\n{str(e)}"
+        print(error_msg)
         try:
-            notifier = Notifier()
-            notifier.send_line_notification(f"システムの自動実行中にエラーが発生しました: {str(e)}")
+            notifier.send_line_notification(error_msg)
         except:
             pass
 
