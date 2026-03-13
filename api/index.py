@@ -28,6 +28,15 @@ app = FastAPI()
 
 # --- Shared Utilities ---
 
+CANCEL_LOG = {} # {user_id: timestamp_of_cancel}
+
+def is_cancelled(uid):
+    if uid in CANCEL_LOG:
+        # Cancel within last 5 minutes
+        if time.time() - CANCEL_LOG[uid] < 300:
+            return True
+    return False
+
 class Notifier:
     def __init__(self):
         self.token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -188,18 +197,22 @@ def run_news_flow(target_id: str, query: Optional[str] = None):
         results = researcher.search_news(query) if query else researcher.search_news()
         facts = researcher.filter_and_extract_facts(results)
         report = reporter.generate_report(facts)
+        if is_cancelled(target_id): return
         notifier.send_line_notification(report, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"ニュースリサーチ失敗: {str(e)}", target_id)
+        if not is_cancelled(target_id):
+            notifier.send_line_notification(f"ニュースリサーチ失敗: {str(e)}", target_id)
 
 def run_news_consultation(query: str, target_id: str):
     notifier = Notifier()
     try:
         consultant = TechConsultant()
         advice = consultant.provide_advice(query)
+        if is_cancelled(target_id): return
         notifier.send_line_notification(advice, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"技術相談失敗: {str(e)}", target_id)
+        if not is_cancelled(target_id):
+            notifier.send_line_notification(f"技術相談失敗: {str(e)}", target_id)
 
 def run_stock_flow(query: str, target_id: str):
     notifier = Notifier()
@@ -209,18 +222,22 @@ def run_stock_flow(query: str, target_id: str):
         results = researcher.search_stock_news(query)
         insights = researcher.extract_stock_insights(results, query)
         report = reporter.generate_stock_report(insights, query)
+        if is_cancelled(target_id): return
         notifier.send_line_notification(report, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"株分析失敗: {str(e)}", target_id)
+        if not is_cancelled(target_id):
+            notifier.send_line_notification(f"株分析失敗: {str(e)}", target_id)
 
 def run_stock_consultation(query: str, target_id: str):
     notifier = Notifier()
     try:
         consultant = InvestmentConsultant()
         advice = consultant.provide_advice(query)
+        if is_cancelled(target_id): return
         notifier.send_line_notification(advice, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"投資相談失敗: {str(e)}", target_id)
+        if not is_cancelled(target_id):
+            notifier.send_line_notification(f"投資相談失敗: {str(e)}", target_id)
 
 # --- Webhook Handlers ---
 
@@ -239,10 +256,15 @@ async def news_webhook(request: Request, background_tasks: BackgroundTasks):
     def handle_news(event):
         msg = event.message.text
         uid = event.source.user_id
-        if any(k in msg for k in ["作りたい", "おすすめ", "技術", "相談"]):
+        if any(k in msg for k in ["キャンセル", "中止", "やめて"]):
+            CANCEL_LOG[uid] = time.time()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="了解しました、現在のリサーチを中断（非表示）します。"))
+        elif any(k in msg for k in ["作りたい", "おすすめ", "技術", "相談"]):
+            if uid in CANCEL_LOG: del CANCEL_LOG[uid]
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="技術的なご相談ですね。検討します…"))
             background_tasks.add_task(run_news_consultation, msg, uid)
         elif any(k in msg for k in ["ニュース", "リサーチ", "教えて"]):
+            if uid in CANCEL_LOG: del CANCEL_LOG[uid]
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースをリサーチして報告します！"))
             background_tasks.add_task(run_news_flow, uid)
         else:
@@ -263,11 +285,17 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
         msg = event.message.text.strip()
         uid = event.source.user_id
         
+        if any(k in msg for k in ["キャンセル", "中止", "やめて"]):
+            CANCEL_LOG[uid] = time.time()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="了解です、分析結果の送信をキャンセルします。"))
+            return
+
         is_stock_code = msg.isdigit() and len(msg) == 4
         general_keywords = ["レポートお願い", "ニュース教えて", "概況", "最新情報", "市場の状況"]
         is_general_request = any(k in msg for k in general_keywords) or msg == "レポート"
         
         if is_stock_code or is_general_request:
+            if uid in CANCEL_LOG: del CANCEL_LOG[uid]
             if is_general_request:
                 target_name = "市場全体（マクロ概況）"
                 display_name = "市場全体の主要トピック"
@@ -278,10 +306,10 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
             line_bot_api.reply_message(
                 event.reply_token, 
                 TextSendMessage(
-                    text=f"「{display_name}」を5段階評価とABCDE格付けで分析します！少々お待ちください📈",
+                    text=f"「{display_name}」を分析します！少々お待ちください…📈",
                     quick_reply=QuickReply(items=[
-                        QuickReplyButton(action=MessageAction(label="市場の概況レポート", text="レポートお願い")),
-                        QuickReplyButton(action=MessageAction(label="投資戦略の相談", text="投資相談に乗って"))
+                        QuickReplyButton(action=MessageAction(label="途中でキャンセル", text="キャンセル")),
+                        QuickReplyButton(action=MessageAction(label="市場の概況レポート", text="レポートお願い"))
                     ])
                 )
             )
