@@ -159,10 +159,10 @@ class StockResearcher:
             code = query.replace("銘柄コード", "").strip()
             processed_query = f"{code}.T {code} 証券コード"
 
-        # Explicitly include the current date in the query to force fresh results
+        # Broaden query to include both "today" and "latest/recent" to handle sparse same-day results
         search_query = (
-            f"本日 {current_date_str} の {processed_query} 株価 日経平均 リアルタイム 決算短信 業績推移 "
-            f"latest {current_date_str} {processed_query} stock price nikkei 225 index realtime financial update"
+            f"{processed_query} 株価 日経平均 リアルタイム 決算短信 最新ニュース {current_date_str} "
+            f"latest {processed_query} stock price nikkei 225 index financial update {current_date_str}"
         )
         url = "https://api.tavily.com/search"
         payload = {
@@ -179,29 +179,25 @@ class StockResearcher:
         current_date_str = datetime.now().strftime("%Y年%m月%d日")
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは「情報の鮮度」を命として動く、超精密なリサーチアナリストです。
-ターゲット銘柄「{query}」について、以下の最新データをもとに「情報の二重検証（ダブルチェック）」を徹底した分析を行なってください。
+あなたは情報の鮮度と正確性に命を懸ける、伝説的なリサーチアナリストです。
+銘柄「{query}」について、以下のデータをもとに情報の「二重検証（ダブルチェック）」を行なってください。
 
 【本日：{current_date_str}】
 
-【厳守事項：データの鮮度ダブルチェック】
-1. **日付の検証**: 各検索結果のデータが「いつ」のものか必ず確認してください。本日（{current_date_str}）の日経平均や株価データと矛盾がないか照合し、古いデータ（数日・数週間前のもの）を「最新」として扱わないよう二重にチェックしてください。
-2. **情報の整合性**: 日経平均が現在急落/急騰している場合、その背景が本日の事象と合致しているか確認してください。ハルシネーション（情報の捏造）は許されません。
-3. **最新ファクトの優先**: 決算直後の場合、昨日の予想ではなく「本日の着地数値」を死守して抽出してください。
+【分析・検証の指針】
+1. **鮮度の検証**: 本日（{current_date_str}）のデータが理想ですが、もし本日の詳細なニュースがまだ十分にない場合は、直近（ここ数日〜数週間）の最も新しい情報を「最新」として分析してください。
+2. **日付の明示**: 採用したデータが「いつ（何日前）」のものか、可能な限り把握し、本日時点での影響を推測・補完してください（例：昨日の終値ベース、直近の決算ベース等）。
+3. **情報の整合性**: 日経平均や市場全体の動きが本日の状況と合致しているか確認し、矛盾がある場合はその旨を冷静に指摘してください。捏造（ハルシネーション）は厳禁です。
+4. **核心の抽出**: 些末な動きではなく、株価のメインドライバーを特定してください。
 
-【分析の深化項目】
-- **財務・指標**: 直近の数値推移と、本日時点でのPER/PBR等の正確な算出。
-- **市場・世界情勢の連動**: 今、この瞬間に動いている材料（為替、金利、地政学リスク）がどう銘柄にヒットしているか。
-- **需給・テクニカル**: 本日の出来高、出来高変化、昨晩のPTS動向など。
-
-挨拶は不要です。今日という日付に100%立脚した、純度の高いインテリジェンスのみを出力してください。
+生きたインテリジェンスのみを、高密度に出力してください。
 """
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception(f"分析フェーズで失敗しました。本日({current_date_str})の情報の取得に問題があります。")
+        raise Exception(f"最新情報の解析に失敗しました。検索結果に十分な分析対象が含まれていない可能性があります。")
 
 class StockReporter:
     def __init__(self):
