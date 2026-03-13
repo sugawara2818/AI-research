@@ -3,14 +3,11 @@ __pycache__/
 .venv/
 venv/
 .vercel/
-*.txt
+# Keep requirements.txt but ignore other txt files
+[a-q,s-z]*.txt
 test_line.py
 list_models.py
-debug_output.txt
-debug_utf8.txt
-debug_output_v2.txt
-debug_utf8_v2.txt
-models_list.txt
-models_list_utf8.txt
-final_debug.txt
-final_debug_utf8.txt
+debug_output*.txt
+debug_utf8*.txt
+models_list*.txt
+final_debug*.txt
