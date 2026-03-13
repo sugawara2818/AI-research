@@ -147,10 +147,18 @@ def perform_research_and_notify():
     try:
         try:
             researcher = Researcher()
-            results = researcher.search_news()
-            facts = researcher.filter_and_extract_facts(results)
+            try:
+                results = researcher.search_news()
+            except Exception as e:
+                raise Exception(f"【Tavily検索エラー】: {str(e)}")
+            
+            try:
+                facts = researcher.filter_and_extract_facts(results)
+            except Exception as e:
+                raise Exception(f"【Gemini抽出エラー】: {str(e)}")
         except Exception as e:
-            raise Exception(f"【検索/分析エラー】: {str(e)}")
+            # Re-raise to be caught by the outer block
+            raise e
 
         try:
             reporter = Reporter()
