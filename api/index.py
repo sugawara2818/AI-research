@@ -257,14 +257,28 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
         msg = event.message.text.strip()
         uid = event.source.user_id
         
-        # Check for 4-digit stock codes (e.g., 7203) or keywords
+        # Check for 4-digit stock codes (e.g., 7203)
         is_stock_code = msg.isdigit() and len(msg) == 4
         
-        if is_stock_code or any(k in msg for k in ["株", "銘柄", "分析", "決算", "いくら"]):
-            target_name = f"銘柄コード {msg}" if is_stock_code else msg
+        # Define general request keywords
+        general_keywords = ["レポートお願い", "ニュース教えて", "概況", "最新情報"]
+        is_general_request = any(k in msg for k in general_keywords) or msg == "レポート"
+        
+        if is_stock_code or is_general_request or any(k in msg for k in ["株", "銘柄", "分析", "決算", "いくら"]):
+            if is_general_request:
+                target_name = "市場全体（マクロ概況）"
+                display_name = "市場全体の概況と注目銘柄"
+            elif is_stock_code:
+                target_name = f"銘柄コード {msg}"
+                display_name = f"銘柄コード {msg}"
+            else:
+                # Clean up the name for searching (remove polite suffixes)
+                target_name = msg.replace("お願い", "").replace("教えて", "").replace("の株", "").replace("について", "").strip()
+                display_name = target_name
+
             line_bot_api.reply_message(
                 event.reply_token, 
-                TextSendMessage(text=f"「{target_name}」をプロの視点で分析します！少々お待ちください📈")
+                TextSendMessage(text=f"「{display_name}」について、プロの視点で分析レポートを作成します！1〜2分ほどお待ちください📈")
             )
             background_tasks.add_task(run_stock_flow, target_name, uid)
             
