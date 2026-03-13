@@ -99,9 +99,16 @@ class StockResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_stock_news(self, query: str) -> List[Dict]:
-        search_query = f"{query} 株価 決算 業績 ニュース stock price earnings news"
+        print(f"Searching stock info for: {query}")
+        # Expand search to include macro factors and world news
+        search_query = f"{query} 株価 マクロ経済 世界情勢 決算 注目銘柄 stock price macro economy geopolitical earnings outlook"
         url = "https://api.tavily.com/search"
-        payload = {"api_key": self.tavily_key, "query": search_query, "search_depth": "advanced", "max_results": 5}
+        payload = {
+            "api_key": self.tavily_key,
+            "query": search_query,
+            "search_depth": "advanced",
+            "max_results": 7 # Increased for broader context
+        }
         res = requests.post(url, json=payload)
         res.raise_for_status()
         return res.json().get('results', [])
@@ -109,18 +116,18 @@ class StockResearcher:
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは百戦錬磨のシニア株式アナリストです。以下の最新の検索結果から、銘柄「{query}」に関する重要情報を技術的・財務的な観点から鋭く分析し、要点を抽出してください。
+あなたは伝説的な投資戦略家（ストラテジスト）です。以下の検索結果に基づき、銘柄「{query}」に関連する情報だけでなく、それを包囲する「世界情勢・マクロ経済」の視点を含めて、多角的な分析を行なってください。
 
 【検索結果】
 {context}
 
-【分析の要件】
-1. **直近の業績・決算**: 売上、利益、進捗率、会社予想との乖離など。
-2. **株価変動の主因**: ポジティブな材料（新製品、提携、好決算）とネガティブな材料（コスト増、市況悪化、下方修正）。
-3. **ファンダメンタルズ/指標**: 表明されているPER、PBR、配当利回り、時価総額などの具体的な数値。
-4. **テクニカル/市場環境**: 需給、移動平均との乖離、競合他社との比較、セクター全体の強弱。
+【分析の必須要件】
+1. **世界情勢・マクロ環境**: 米国金利、インフレ、地政学リスク、原油価格、為替動向など、ターゲット銘柄に影響を与える外部環境を整理してください。
+2. **多角的な見解**: 単一の結論ではなく、強気派・弱気派それぞれの視点や、市場の様々な思惑を抽出してください。
+3. **個別銘柄分析**: 業績、決算、財務指標、競争優位性を鋭く評価してください。
+4. **注目銘柄・セクターの提示**: 客観的データに基づき、現在の環境下で「特に注目すべき関連銘柄やセクター」を具体的に挙げてください。
 
-余計な挨拶は一切不要です。プロ仕様の箇条書きで、事実に基づいた高密度の情報を出力してください。
+客観性を保ちつつも、投資家が「次の一手」を判断できるような鋭いインサイトを出力してください。挨拶は不要です。
 """
         for model_name in self.models_to_try:
             try:
