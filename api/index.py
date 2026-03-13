@@ -133,7 +133,7 @@ class Notifier:
 channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 line_bot_api = LineBotApi(channel_access_token or "dummy")
-handler = WebhookHandler(channel_secret or "dummy")
+line_handler = WebhookHandler(channel_secret or "dummy")
 
 def perform_research_and_notify():
     try:
