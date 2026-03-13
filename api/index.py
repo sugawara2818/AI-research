@@ -104,19 +104,13 @@ class StockResearcher:
 
     def search_stock_news(self, query: str) -> List[Dict]:
         print(f"Searching stock info for: {query}")
-        # Build a more aggressive query for macro and geopolitical risks
-        # Especially targeting energy and conflict areas which are often missed
         search_query = (
-            f"{query} 株価 決算 業績 マクロ経済 世界情勢 地政学リスク 原油 中東 ウクライナ "
-            f"stock market macro geopolitical risk oil price conflict Middle East earnings"
+            f"{query} 株価 マクロ動向 経済ニュース 地政学リスク 原油価格 金利動向 金融市場 衝撃 "
+            f"stock market macro-economic context geopolitical flashpoints energy security "
+            f"vulnerability analysis volatility drivers earnings indicators"
         )
         url = "https://api.tavily.com/search"
-        payload = {
-            "api_key": self.tavily_key,
-            "query": search_query,
-            "search_depth": "advanced",
-            "max_results": 10 # Increase to ensure broad coverage
-        }
+        payload = {"api_key": self.tavily_key, "query": search_query, "search_depth": "advanced", "max_results": 10}
         res = requests.post(url, json=payload)
         res.raise_for_status()
         return res.json().get('results', [])
@@ -124,27 +118,26 @@ class StockResearcher:
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは世界情勢と金融市場の繋がりを読み解く伝説のストラテジストです。
-以下の検索結果に基づき、銘柄「{query}」や市場全体を揺るがす「地政学的地殻変動」を逃さず分析してください。
+あなたは世界屈指のインテリジェンス・ストラテジストです。
+ターゲット銘柄「{query}」に関連する事実のみならず、現代の金融市場を規定する「あらゆる外部衝撃」を徹底的に洗い出し、分析してください。
 
 【検索結果】
 {context}
 
-【分析の厳守事項】
-1. **地政学・国際情勢の激震**: イラン、中東情勢、ウクライナ、米中関係など、市場が「リスク」として認識している現在進行形の紛争や緊張を必ず反映してください。
-2. **エネルギー・資源価格**: 原油価格、天然ガス、ゴールド等の動きが、ターゲット銘柄や世界経済にどう波及しているか。
-3. **金利とインフレの相関**: マクロ経済の基礎要因を整理してください。
-4. **多角的な結末予想**: 楽観シナリオと、一気に冷え込む悲観シナリオの両方を提示してください。
-5. **注目セクター・銘柄**: この地政学的リスクを「回避」または「利用」できる注目先を具体的に挙げてください。
+【分析の徹底事項】
+1. **マクロ・地政学リスクの特定**: 現在市場を揺るがしている重大な外部要因（紛争、金利、資源等）の特定。
+2. **多角的シナリオ**: 強気派・弱気派それぞれの視点。
+3. **個別ファンダメンタルズ精査**: 業績、財務指標（PER, PBR等）、競争力。
+4. **定量的評価の準備**: 後の評価のため、「成長性」「収益性」「安全性」「割安性」「外部環境耐性」の5項目について、具体的な根拠を抽出してください。
 
-「イラン情勢への言及がない」といった見落としは致命的です。世界地図を俯瞰するような鋭いインサイトを優先してください。
+挨拶は不要です。市場の深層を突くインサイトを出力してください。
 """
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception("Stock分析フェーズでエラーが発生しました。")
+        raise Exception("Stock分析フェーズで失敗しました。")
 
 class StockReporter:
     def __init__(self):
@@ -154,21 +147,25 @@ class StockReporter:
     def generate_stock_report(self, insights: str, query: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
         prompt = f"""
-あなたは機関投資家向けの調査報告書を作成するシニア・エクイティ・アナリストです。
-以下の分析データをもとに、銘柄「{query}」の「株式調査レポート」を完成させてください。
+あなたは機関投資家向けのトップストラテジストです。
+以下の分析データに基づき、銘柄「{query}」の「戦略インテリジェンス・レポート」を作成してください。
 
 【分析データ】
 {insights}
 
-【レポートの構成案】
-1. **【{query}】 株式調査レポート ({current_date})**
-2. **エグゼクティブ・サマリー**: 今、この銘柄で何が起きているのか？（3行以内）
-3. **重点分析項目**: 業績、材料、財務状況、市場ポジションの深掘り。
-4. **リスクとチャンス**: 投資家が考慮すべき上値余地と底値リスク。
-5. **結論・考察**: 今後の株価の見通しについての論理的な展望。
-6. **リソース・ソース**: 参考URLや関連トピックの紹介。
+【レポートの構成・必須要件】
+1. **タイトル**: 戦略インテリジェンス・レポート ({current_date}): {query}
+2. **エグゼクティブ・サマリー**: 現状の核心（3行以内）。
+3. **5段階評価（スコアリング）**: 
+   以下の5項目を5点満点（★）で評価し、表形式で出力してください。
+   - 成長性 / 収益性 / 安全性 / 割安性 / 外部環境耐性
+4. **総合評価 (A~E)**: 
+   S(例外) / A(買い) / B(保留) / C(注視) / D(警戒) / E(売り) の中から一つ選び、大きく表示。
+5. **詳細分析**: 世界情勢と業績の相関。
+6. **戦術的スクリーニング**: 今日のデータから導き出される注目関連銘柄（3選）。
+7. **一言（パンチライン）**: 最後に、投資家への魂の一言を添えてください。
 
-読みやすさと格調高さを両立させ、エンジニアや投資家も納得する論理的な構成にしてください。Markdown形式で出力してください。
+Markdown形式で出力してください。
 """
         return self.model.generate_content(prompt).text
 
@@ -232,7 +229,6 @@ channel_secret = os.getenv("LINE_CHANNEL_SECRET")
 line_bot_api = LineBotApi(channel_access_token or "dummy")
 line_handler = WebhookHandler(channel_secret or "dummy")
 
-# Helper to route based on path
 @app.post("/api/webhook")
 @app.post("/api/index")
 async def news_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -267,29 +263,22 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
         msg = event.message.text.strip()
         uid = event.source.user_id
         
-        # Check for 4-digit stock codes (e.g., 7203)
         is_stock_code = msg.isdigit() and len(msg) == 4
-        
-        # Define general request keywords
-        general_keywords = ["レポートお願い", "ニュース教えて", "概況", "最新情報"]
+        general_keywords = ["レポートお願い", "ニュース教えて", "概況", "最新情報", "市場の状況"]
         is_general_request = any(k in msg for k in general_keywords) or msg == "レポート"
         
-        if is_stock_code or is_general_request or any(k in msg for k in ["株", "銘柄", "分析", "決算", "いくら"]):
+        if is_stock_code or is_general_request:
             if is_general_request:
                 target_name = "市場全体（マクロ概況）"
                 display_name = "市場全体の主要トピック"
-            elif is_stock_code:
+            else:
                 target_name = f"銘柄コード {msg}"
                 display_name = f"銘柄コード {msg}"
-            else:
-                # Clean up the name for searching (remove polite suffixes)
-                target_name = msg.replace("お願い", "").replace("教えて", "").replace("の株", "").replace("について", "").strip()
-                display_name = target_name
 
             line_bot_api.reply_message(
                 event.reply_token, 
                 TextSendMessage(
-                    text=f"「{display_name}」について、プロの分析レポートを作成します！1〜2分ほどお待ちください📈",
+                    text=f"「{display_name}」を5段階評価とABCDE格付けで分析します！少々お待ちください📈",
                     quick_reply=QuickReply(items=[
                         QuickReplyButton(action=MessageAction(label="市場の概況レポート", text="レポートお願い")),
                         QuickReplyButton(action=MessageAction(label="投資戦略の相談", text="投資相談に乗って"))
@@ -322,7 +311,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def health():
-    return {"status": "Universal AI Bot is running. Endpoints: /api/webhook, /api/stock"}
+    return {"status": "Universal AI Bot v5 (Scoring Mode) is running."}
 
 @app.get("/cron")
 @app.get("/api/index/cron")
