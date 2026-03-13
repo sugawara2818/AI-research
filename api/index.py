@@ -30,7 +30,9 @@ class Researcher:
         self.tavily_key = os.getenv("TAVILY_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=self.gemini_key)
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        # Attempt multiple models in case of 404
+        self.models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+        self.model = genai.GenerativeModel(self.models_to_try[0])
 
     def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
         print(f"Searching for: {query}")
@@ -63,21 +65,29 @@ class Researcher:
 
 余計な挨拶は不要です。技術的密度を高めてください。
 """
-        for attempt in range(2): # Reduce attempts to stay safe with timeout
-            try:
-                response = self.model.generate_content(prompt)
-                return response.text
-            except exceptions.ResourceExhausted:
-                if attempt == 1: raise
-                print("Gemini Quota exceeded, waiting 60s...")
-                time.sleep(60) # Reduced from 300 to 60 for serverless
-            except Exception as e:
-                raise e
+        for model_name in self.models_to_try:
+            for attempt in range(2):
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    response = self.model.generate_content(prompt)
+                    return response.text
+                except exceptions.NotFound:
+                    print(f"Model {model_name} not found, trying next...")
+                    break # Try next model
+                except exceptions.ResourceExhausted:
+                    if attempt == 1: break # Try next model if quota hit after retry
+                    print(f"Gemini {model_name} Quota exceeded, waiting 60s...")
+                    time.sleep(60)
+                except Exception as e:
+                    if model_name == self.models_to_try[-1]: raise e
+                    break
+        raise Exception("All attempted Gemini models failed or were not found.")
 
 class Reporter:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        self.models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+        self.model = genai.GenerativeModel(self.models_to_try[0])
 
     def generate_report(self, facts: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
@@ -99,16 +109,21 @@ class Reporter:
 
 読みやすさを重視しつつ、専門用語は適切に使用してください。
 """
-        for attempt in range(2):
-            try:
-                response = self.model.generate_content(prompt)
-                return response.text
-            except exceptions.ResourceExhausted:
-                if attempt == 1: raise
-                print("Gemini Quota exceeded, waiting 60s...")
-                time.sleep(60)
-            except Exception as e:
-                raise e
+        for model_name in self.models_to_try:
+            for attempt in range(2):
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    response = self.model.generate_content(prompt)
+                    return response.text
+                except exceptions.NotFound:
+                    break
+                except exceptions.ResourceExhausted:
+                    if attempt == 1: break
+                    time.sleep(60)
+                except Exception as e:
+                    if model_name == self.models_to_try[-1]: raise e
+                    break
+        raise Exception("All Gemini models failed for reporting.")
 
 class Notifier:
     def __init__(self):
@@ -173,7 +188,9 @@ def perform_research_and_notify():
 
         print("Background flow: Finished successfully.")
     except Exception as e:
-        error_msg = f"システムの実行中にエラーが発生しました:\n{str(e)}"
+        import google.generativeai as gai
+        lib_ver = getattr(gai, "__version__", "unknown")
+        error_msg = f"システムの実行中にエラーが発生しました:\n{str(e)}\n(Lib: {lib_ver})"
         print(error_msg)
         try:
             notifier.send_line_notification(error_msg)
