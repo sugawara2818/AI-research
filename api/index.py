@@ -172,16 +172,17 @@ class Consultant:
 class Notifier:
     def __init__(self):
         self.token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-        self.user_id = os.getenv("LINE_USER_ID")
+        self.owner_id = os.getenv("LINE_USER_ID")
         self.url = "https://api.line.me/v2/bot/message/push"
 
-    def send_line_notification(self, text: str):
-        if not self.token or not self.user_id:
+    def send_line_notification(self, text: str, target_id: Optional[str] = None):
+        dest_id = target_id or self.owner_id
+        if not self.token or not dest_id:
             return
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.token}"}
         chunks = [text[i:i+4500] for i in range(0, len(text), 4500)]
         for chunk in chunks:
-            payload = {"to": self.user_id, "messages": [{"type": "text", "text": chunk}]}
+            payload = {"to": dest_id, "messages": [{"type": "text", "text": chunk}]}
             try:
                 res = requests.post(self.url, headers=headers, json=payload)
                 res.raise_for_status()
@@ -197,7 +198,7 @@ line_handler = WebhookHandler(channel_secret or "dummy")
 
 current_bg_tasks = None
 
-def perform_research_and_notify():
+def perform_research_and_notify(target_id: Optional[str] = None):
     notifier = Notifier()
     try:
         researcher = Researcher()
@@ -205,22 +206,28 @@ def perform_research_and_notify():
         facts = researcher.filter_and_extract_facts(results)
         reporter = Reporter()
         report = reporter.generate_report(facts)
-        notifier.send_line_notification(report)
+        notifier.send_line_notification(report, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"システムの実行中にエラーが発生しました:\n{str(e)}")
+        notifier.send_line_notification(f"システムの実行中にエラーが発生しました:\n{str(e)}", target_id)
 
-def perform_consultation_and_notify(query: str):
+def perform_consultation_and_notify(query: str, target_id: Optional[str] = None):
     notifier = Notifier()
     try:
         consultant = Consultant()
         advice = consultant.provide_advice(query)
-        notifier.send_line_notification(advice)
+        notifier.send_line_notification(advice, target_id)
     except Exception as e:
-        notifier.send_line_notification(f"相談フェーズでエラーが発生しました: {str(e)}")
+        notifier.send_line_notification(f"相談フェーズでエラーが発生しました: {str(e)}", target_id)
 
 @app.get("/")
 async def health_check():
-    return {"status": "Webhook is running (Hyper-Responsive Mode v3)"}
+    return {"status": "Webhook is running (Multi-User-Safe Mode v4)"}
+
+@app.get("/api/index/cron")
+@app.get("/cron")
+async def cron_trigger(background_tasks: BackgroundTasks):
+    background_tasks.add_task(perform_research_and_notify) # Defaults to owner
+    return {"status": "Scheduled research started for owner"}
 
 @app.post("/")
 @app.post("/api/index")
@@ -240,6 +247,7 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 @line_handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_msg = event.message.text
+    user_id = event.source.user_id
     
     # Consultation logic
     if any(k in user_msg for k in ["作りたい", "おすすめ", "技術", "方法", "相談", "アドバイス"]):
@@ -248,7 +256,7 @@ def handle_message(event):
             TextSendMessage(text="技術的なご相談ですね！アーキテクトとして最適な構成を検討します。少々お待ちください…")
         )
         if current_bg_tasks:
-            current_bg_tasks.add_task(perform_consultation_and_notify, user_msg)
+            current_bg_tasks.add_task(perform_consultation_and_notify, user_msg, user_id)
     
     # Research logic
     elif any(k in user_msg for k in ["ニュース", "出来事", "リサーチ", "教えて"]):
@@ -257,7 +265,7 @@ def handle_message(event):
             TextSendMessage(text="了解しました！リサーチを開始します。おすすめのツールやURLも含めて整理しますね。")
         )
         if current_bg_tasks:
-            current_bg_tasks.add_task(perform_research_and_notify)
+            current_bg_tasks.add_task(perform_research_and_notify, user_id)
     
     else:
         line_bot_api.reply_message(
