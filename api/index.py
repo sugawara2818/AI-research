@@ -113,13 +113,18 @@ class StockResearcher:
 
     def search_stock_news(self, query: str) -> List[Dict]:
         print(f"Searching stock info for: {query}")
+        # Balanced search query: Financials + Technicals + Macro/Geopolitics
         search_query = (
-            f"{query} 株価 マクロ動向 経済ニュース 地政学リスク 原油価格 金利動向 金融市場 衝撃 "
-            f"stock market macro-economic context geopolitical flashpoints energy security "
-            f"vulnerability analysis volatility drivers earnings indicators"
+            f"{query} 株価 決算 業績見通し 財務分析 チャート動向 市場ニュース 世界情勢 "
+            f"stock price earnings financial analysis chart trends market news global macro"
         )
         url = "https://api.tavily.com/search"
-        payload = {"api_key": self.tavily_key, "query": search_query, "search_depth": "advanced", "max_results": 10}
+        payload = {
+            "api_key": self.tavily_key,
+            "query": search_query,
+            "search_depth": "advanced",
+            "max_results": 10
+        }
         res = requests.post(url, json=payload)
         res.raise_for_status()
         return res.json().get('results', [])
@@ -127,26 +132,25 @@ class StockResearcher:
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは世界屈指のインテリジェンス・ストラテジストです。
-ターゲット銘柄「{query}」に関連する事実のみならず、現代の金融市場を規定する「あらゆる外部衝撃」を徹底的に洗い出し、分析してください。
+あなたは超一流のマルチアセット・アナリストです。銘柄「{query}」に関するあらゆる情報を精査し、投資判断に「真に必要な情報」を冷徹に選別して分析してください。
 
 【検索結果】
 {context}
 
-【分析の徹底事項】
-1. **マクロ・地政学リスクの特定**: 現在市場を揺るがしている重大な外部要因（紛争、金利、資源等）の特定。
-2. **多角的シナリオ**: 強気派・弱気派それぞれの視点。
-3. **個別ファンダメンタルズ精査**: 業績、財務指標（PER, PBR等）、競争力。
-4. **定量的評価の準備**: 後の評価のため、「成長性」「収益性」「安全性」「割安性」「外部環境耐性」の5項目について、具体的な根拠を抽出してください。
+【分析の鉄則】
+1. **情報の取捨選択と重み付け**: 決算数値、成長戦略、需給動向、そして世界情勢。これらの中から、今この瞬間に最も市場が反応している要素（例：もし中東情勢が原油高を通じ業績に直結するなら重点的に、そうでなければ客観的事実として）を適切に選別してください。
+2. **多角的なファクトチェック**: 単なるニュースの引き写しではなく、財務諸表の裏付け、指標（PER/PBR/ROE等）の妥当性、市場環境の変化をクロスチェックしてください。
+3. **網羅性と死角の排除**: 重要なリスクを見落としていないか自問自答してください。マクロ経済の動向が個別株の前提を壊す場合は必ず言及し、逆に個別株の強みが市場を上回る場合も説明してください。
+4. **定量的根拠の提示**: 5段階スコアリング（成長性、収益性、安全性、割安性、外部環境耐性）のための具体的数値を必ず抽出してください。
 
-挨拶は不要です。市場の深層を突くインサイトを出力してください。
+挨拶や装飾は不要です。高密度なインテリジェンスのみを出力してください。
 """
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception("Stock分析フェーズで失敗しました。")
+        raise Exception("Stock分析フェーズで、情報抽出に失敗しました。")
 
 class StockReporter:
     def __init__(self):
