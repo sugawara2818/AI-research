@@ -12,9 +12,15 @@ load_dotenv()
 
 app = FastAPI()
 
-# LINE Credentials from environment variables
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+# Check environment variables
+channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+channel_secret = os.getenv("LINE_CHANNEL_SECRET")
+
+if not channel_access_token or not channel_secret:
+    print("CRITICAL ERROR: Missing LINE credentials in environment variables.")
+
+line_bot_api = LineBotApi(channel_access_token)
+handler = WebhookHandler(channel_secret)
 
 def perform_research_and_notify():
     """Shared logic for both interactive commands and cron jobs"""
@@ -32,17 +38,25 @@ def perform_research_and_notify():
         print("Flow completed successfully.")
     except Exception as e:
         print(f"Error in research flow: {e}")
-        notifier = Notifier()
-        notifier.send_line_notification(f"システムの自動実行中にエラーが発生しました: {str(e)}")
+        # Notifier might fail if keys are missing
+        try:
+            notifier = Notifier()
+            notifier.send_line_notification(f"システムの自動実行中にエラーが発生しました: {str(e)}")
+        except:
+            pass
+
+@app.get("/")
+async def health_check():
+    return {"status": "Webhook is running"}
 
 @app.get("/api/webhook/cron")
+@app.get("/cron")
 async def cron_trigger(request: Request):
-    # Simple security check if needed - Vercel allows limiting cron access easily
-    # But for simplicity, we trigger the flow
     perform_research_and_notify()
-    return {"status": "Research flow triggered via Cron"}
+    return {"status": "Cron execution started"}
 
-@app.post("/api/webhook")
+@app.post("/")
+@app.post("/api/webhook") # Keep for local testing if needed
 async def webhook(request: Request):
     signature = request.headers.get("X-Line-Signature")
     if not signature:
