@@ -68,21 +68,40 @@ class NewsResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
+        current_date_str = datetime.now().strftime("%Y-%m-%d")
+        # Inject today's date to force fresh AI tool and model news
+        search_query = f"{current_date_str} {query} new AI tools models research releases"
         url = "https://api.tavily.com/search"
-        payload = {"api_key": self.tavily_key, "query": query, "search_depth": "advanced", "max_results": 5}
+        payload = {
+            "api_key": self.tavily_key, 
+            "query": search_query, 
+            "search_depth": "advanced", 
+            "max_results": 10
+        }
         res = requests.post(url, json=payload)
         res.raise_for_status()
         return res.json().get('results', [])
 
     def filter_and_extract_facts(self, search_results: List[Dict]) -> str:
+        current_date_str = datetime.now().strftime("%Y年%m月%d日")
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
-        prompt = f"あなたは高度なAI技術アナリストです。以下の結果から開発者に価値ある動向を3つ厳選し、ツールリンクやXアカウントを含めて整理してください。\n\n【結果】\n{context}"
+        prompt = f"""
+あなたは世界最先端のAI技術リサーチアナリストです。
+以下の検索結果から、本日（{current_date_str}）時点で「最も技術的価値が高く、かつ最新の」AI動向を3つ厳選し、冷徹に分析してください。
+
+【厳守：情報の鮮度ダブルチェック】
+1. **日付の死守**: 検索結果が「数ヶ月前」や「去年」のものでないか厳格に確認してください。今日（{current_date_str}）周辺の発表、あるいは今週起きた出来事のみを「最新」として扱ってください。
+2. **技術的ファクトのみを抽出**: 誇大広告（ハイプ）を排し、実装方法、パラメータ数、ベンチマーク結果、ライセンス体系などの「硬い情報」を優先してください。
+3. **リソースの特定**: 関連するGitHubリポジトリ、Hugging Faceモデル、公式論文、開発者のXアカウントを必ず特定してください。
+
+「なんとなく凄そう」なまとめは不要です。エンジニアが明日から使える、あるいは警戒すべき「生きた情報」のみを出力してください。
+"""
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception("News extraction failed.")
+        raise Exception(f"AIリサーチフェーズで失敗しました。本日({current_date_str})の最新情報を取得できません。")
 
 class NewsReporter:
     def __init__(self):
@@ -91,7 +110,22 @@ class NewsReporter:
 
     def generate_report(self, facts: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
-        prompt = f"ITエンジニア向けの「週刊AI技術サマリー({current_date})」を、事実に基づき論理的に作成してください。ツールやXアカウントをリソースとしてまとめてください。\n\n【事実】\n{facts}"
+        prompt = f"""
+あなたはトップエンジニア向けの技術インテリジェンス・レポートを執筆するシニアアナリストです。
+以下の分析データに基づき、「AI技術インテリジェンス・プロレポート」を作成してください。
+
+【分析データ】
+{facts}
+
+【レポートの構成】
+1. **AI技術インテリジェンス・プロレポート ({current_date})**
+2. **キー・インサイト**: 今日の最重要動向とその背景。
+3. **技術詳細・最新リリース**: 厳選された3つのトピックの深掘り。
+4. **実装・活用のヒント**: エンジニアがどう向き合うべきか。
+5. **リソース一覧**: GitHub / 公式ページ / Xアカウント等。
+
+挨拶、装飾、一言感想などは「一切不要」です。プロフェッショナルで論理的なMarkdown形式で、高密度な情報を提供してください。
+"""
         return self.model.generate_content(prompt).text
 
 class TechConsultant:
