@@ -6,9 +6,6 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from researcher import Researcher
 from reporter import Reporter
 from notifier import Notifier
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = FastAPI()
 

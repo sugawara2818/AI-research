@@ -5,9 +5,6 @@ from typing import List, Dict
 from tavily import TavilyClient
 import google.generativeai as genai
 from google.api_core import exceptions
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class Researcher:
     def __init__(self):

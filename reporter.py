@@ -3,9 +3,6 @@ import time
 from datetime import datetime
 import google.generativeai as genai
 from google.api_core import exceptions
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class Reporter:
     def __init__(self):
