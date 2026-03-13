@@ -174,14 +174,14 @@ async def webhook(request: Request):
     if not signature: raise HTTPException(status_code=400)
     body = (await request.body()).decode("utf-8")
     try:
-        handler.handle(body, signature)
+        line_handler.handle(body, signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return "OK"
 
-@handler.add(MessageEvent, message=TextMessage)
+@line_handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     user_msg = event.message.text
     if any(k in user_msg for k in ["ニュース", "出来事", "リサーチ", "教えて"]):
