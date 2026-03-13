@@ -2,6 +2,7 @@ import os
 import time
 import json
 import sys
+import re
 from datetime import datetime
 from typing import List, Dict, Optional
 
@@ -113,17 +114,22 @@ class StockResearcher:
 
     def search_stock_news(self, query: str) -> List[Dict]:
         print(f"Searching stock info for: {query}")
-        # Balanced search query: Financials + Technicals + Macro/Geopolitics
+        # Append .T for Tokyo Stock Exchange if it's a numeric code to avoid hallucination
+        processed_query = query
+        if "銘柄コード" in query:
+            code = query.replace("銘柄コード", "").strip()
+            processed_query = f"{code}.T {code} 証券コード"
+
         search_query = (
-            f"{query} 株価 決算 業績見通し 財務分析 チャート動向 市場ニュース 世界情勢 "
-            f"stock price earnings financial analysis chart trends market news global macro"
+            f"{processed_query} 株価 決算短信 業績推移 財務分析 チャート動向 市場ニュース 世界情勢 "
+            f"stock price {processed_query} financial stats analyst ratings technical analysis peer comparison market impacts"
         )
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key,
             "query": search_query,
             "search_depth": "advanced",
-            "max_results": 10
+            "max_results": 15 # High density search for precision
         }
         res = requests.post(url, json=payload)
         res.raise_for_status()
@@ -132,18 +138,27 @@ class StockResearcher:
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは超一流のマルチアセット・アナリストです。銘柄「{query}」に関するあらゆる情報を精査し、投資判断に「真に必要な情報」を冷徹に選別して分析してください。
+あなたは極めて優秀かつ冷徹なシニア・リサーチアナリストです。
+銘柄「{query}」について、以下の検索結果をもとに「超高精度・超詳細な分析」を行なってください。
 
-【検索結果】
-{context}
+【絶対遵守：銘柄の同一性確認】
+検索結果にターゲット以外の銘柄（似たコードや名前）が混じっていることが多々あります。
+必ず「証券コード」と「企業名」を照合し、ターゲット銘柄と確信できる情報のみを抽出してください。混同はプロとして致命的です。
 
-【分析の鉄則】
-1. **情報の取捨選択と重み付け**: 決算数値、成長戦略、需給動向、そして世界情勢。これらの中から、今この瞬間に最も市場が反応している要素（例：もし中東情勢が原油高を通じ業績に直結するなら重点的に、そうでなければ客観的事実として）を適切に選別してください。
-2. **多角的なファクトチェック**: 単なるニュースの引き写しではなく、財務諸表の裏付け、指標（PER/PBR/ROE等）の妥当性、市場環境の変化をクロスチェックしてください。
-3. **網羅性と死角の排除**: 重要なリスクを見落としていないか自問自答してください。マクロ経済の動向が個別株の前提を壊す場合は必ず言及し、逆に個別株の強みが市場を上回る場合も説明してください。
-4. **定量的根拠の提示**: 5段階スコアリング（成長性、収益性、安全性、割安性、外部環境耐性）のための具体的数値を必ず抽出してください。
+【分析の深化項目】
+1. **財務・決算の詳細分析**: 
+   売上高、営業利益、純利益の直近数値。前年同期比、進捗率。通期予想の上方/下方修正の有無。
+2. **定量的評価データの収集**: 
+   PER、PBR、ROE、配当利回り、自己資本比率の具体的数値。業界平均や過去平均との比較。
+3. **テクニカル・需給状況の診断**: 
+   現在のチャート形状、支持線・抵抗線。移動平均線との乖離率。出来高の推移、信用買い残・売り残の状況。
+4. **マクロ・外部環境の波及経路**: 
+   今、世界のどこで起きている「何（金利、為替、紛争、政策等）」が、この企業のサプライチェーンや最終利益にどうヒットするのかを具体的に特定してください。
+5. **情報の峻別**: 
+   些末なニュースは捨て、株価のメインドライバー（材料）を1〜2点に絞り込んで深掘りしてください。
 
-挨拶や装飾は不要です。高密度なインテリジェンスのみを出力してください。
+【5段階評価の準備】
+「成長性」「収益性」「安全性」「割安性」「外部環境耐性」の5項目を★で表すための具体的根拠を、検索結果から漏れなく抽出してください。
 """
         for model_name in self.models_to_try:
             try:
@@ -160,25 +175,25 @@ class StockReporter:
     def generate_stock_report(self, insights: str, query: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
         prompt = f"""
-あなたは機関投資家向けのトップストラテジストです。
-以下の分析データに基づき、銘柄「{query}」の「戦略インテリジェンス・レポート」を作成してください。
+あなたは機関投資家が「最終判断の根拠」とする、最高峰の株式インテリジェンス・レポートを執筆するアナリストです。
+以下の分析データに基づき、銘柄「{query}」の「株式インテリジェンス・完全レポート」を完成させてください。
 
 【分析データ】
 {insights}
 
-【レポートの構成・必須要件】
-1. **タイトル**: 戦略インテリジェンス・レポート ({current_date}): {query}
-2. **エグゼクティブ・サマリー**: 現状の核心（3行以内）。
-3. **5段階評価（スコアリング）**: 
-   以下の5項目を5点満点（★）で評価し、表形式で出力してください。
-   - 成長性 / 収益性 / 安全性 / 割安性 / 外部環境耐性
-4. **総合評価 (A~E)**: 
-   S(例外) / A(買い) / B(保留) / C(注視) / D(警戒) / E(売り) の中から一つ選び、大きく表示。
-5. **詳細分析**: 世界情勢と業績の相関。
-6. **戦術的スクリーニング**: 今日のデータから導き出される注目関連銘柄（3選）。
-7. **一言（パンチライン）**: 最後に、投資家への魂の一言を添えてください。
+【レポートの構成（高密度・多層的）】
+1. **【{query}】 株式インテリジェンス・完全レポート ({current_date})**
+2. **エグゼクティブ・サマリー**: 今、この銘柄で起きていることの核心を3本指の箇条書きで。
+3. **5段階スコア・カード**: 成長性/収益性/安全性/割安性/外部環境耐性（★1〜5）を表形式で。
+4. **統合格付け (Rating)**: S / A / B / C / D / E を大きく表示（解説付き）。
+5. **業績・財務の深掘り**: 数値に基づく直近の評価と、将来の期待値。
+6. **テクニカル・チャートの視点**: 需給バランスと、投資家が意識すべき価格帯。
+7. **マクロの波及インテリジェンス**: 世界情勢がこの銘柄のPL/BSにヒットする経路（イラン情勢、米利下げ等、今現在最も重要な要因を取り上げること）。
+8. **競合比較・市場優位性**: ライバルとの対比で見えた「この企業だけの強み」。
+9. **シナリオ予測とテールリスク**: 市場がまだ織り込んでいない、想定外のサプライズ要因。
+10. **戦術的スクリーニング**: 同セクター等の注目関連銘柄（3選）。
 
-Markdown形式で出力してください。
+Markdown形式で、論理的かつ洗練された構成にしてください。挨拶や最後の一言アドバイスは「一切不要」です。
 """
         return self.model.generate_content(prompt).text
 
@@ -262,14 +277,14 @@ async def news_webhook(request: Request, background_tasks: BackgroundTasks):
         uid = event.source.user_id
         if any(k in msg for k in ["キャンセル", "中止", "やめて"]):
             CANCEL_LOG[uid] = time.time()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="了解しました、現在のリサーチを中断（非表示）します。"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="リサーチを中断（非表示）しました。"))
         elif any(k in msg for k in ["作りたい", "おすすめ", "技術", "相談"]):
             if uid in CANCEL_LOG: del CANCEL_LOG[uid]
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="技術的なご相談ですね。検討します…"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="検討を開始します…"))
             background_tasks.add_task(run_news_consultation, msg, uid)
         elif any(k in msg for k in ["ニュース", "リサーチ", "教えて"]):
             if uid in CANCEL_LOG: del CANCEL_LOG[uid]
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースをリサーチして報告します！"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースをリサーチします！"))
             background_tasks.add_task(run_news_flow, uid)
         else:
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="AIニュースや開発の相談をどうぞ！"))
@@ -291,7 +306,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
         
         if any(k in msg for k in ["キャンセル", "中止", "やめて"]):
             CANCEL_LOG[uid] = time.time()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="了解です、分析結果の送信をキャンセルします。"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="分析結果の送信をキャンセルします。"))
             return
 
         is_stock_code = msg.isdigit() and len(msg) == 4
@@ -302,7 +317,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
             if uid in CANCEL_LOG: del CANCEL_LOG[uid]
             if is_general_request:
                 target_name = "市場全体（マクロ概況）"
-                display_name = "市場全体の主要トピック"
+                display_name = "マクロ概況と注目銘柄"
             else:
                 target_name = f"銘柄コード {msg}"
                 display_name = f"銘柄コード {msg}"
@@ -310,7 +325,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
             line_bot_api.reply_message(
                 event.reply_token, 
                 TextSendMessage(
-                    text=f"「{display_name}」を分析します！少々お待ちください…📈",
+                    text=f"「{display_name}」について、高精度なプロ用レポートを作成します！少々お待ちください📈",
                     quick_reply=QuickReply(items=[
                         QuickReplyButton(action=MessageAction(label="途中でキャンセル", text="キャンセル")),
                         QuickReplyButton(action=MessageAction(label="市場の概況レポート", text="レポートお願い"))
@@ -320,12 +335,12 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
             background_tasks.add_task(run_stock_flow, target_name, uid)
             
         elif any(k in msg for k in ["相談", "投資", "買い", "売り"]):
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="投資戦略のアドバイスを用意します。"))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="投資アドバイスを用意します。"))
             background_tasks.add_task(run_stock_consultation, msg, uid)
         else:
             buttons_template = ButtonsTemplate(
                 title='株式投資・市場分析AI',
-                text='4桁のコードを入力するか、ボタンからレポートをリクエストできます。',
+                text='4桁のコードを入力するか、ボタンを選択してください。',
                 actions=[
                     MessageAction(label='市場の概況レポート', text='レポートお願い'),
                     MessageAction(label='投資戦略の相談', text='投資相談に乗って'),
@@ -343,7 +358,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def health():
-    return {"status": "Universal AI Bot v5 (Scoring Mode) is running."}
+    return {"status": "Universal AI Bot v10 (Precision Mode) is running."}
 
 @app.get("/cron")
 @app.get("/api/index/cron")
