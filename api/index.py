@@ -65,23 +65,29 @@ class Researcher:
 
 余計な挨拶は不要です。技術的密度を高めてください。
 """
+        error_details = []
         for model_name in self.models_to_try:
             for attempt in range(2):
                 try:
+                    print(f"Trying model: {model_name} (Attempt {attempt+1})")
                     self.model = genai.GenerativeModel(model_name)
                     response = self.model.generate_content(prompt)
                     return response.text
-                except exceptions.NotFound:
-                    print(f"Model {model_name} not found, trying next...")
-                    break # Try next model
-                except exceptions.ResourceExhausted:
-                    if attempt == 1: break # Try next model if quota hit after retry
-                    print(f"Gemini {model_name} Quota exceeded, waiting 60s...")
-                    time.sleep(60)
+                except exceptions.NotFound as e:
+                    error_details.append(f"{model_name}: NotFound - {str(e)}")
+                    break 
+                except exceptions.ResourceExhausted as e:
+                    error_details.append(f"{model_name}: QuotaExceeded - {str(e)}")
+                    if attempt == 1: break 
+                    print(f"Gemini {model_name} Quota hit, waiting 30s...")
+                    time.sleep(30)
                 except Exception as e:
-                    if model_name == self.models_to_try[-1]: raise e
+                    error_details.append(f"{model_name}: Error - {str(e)}")
+                    if model_name == self.models_to_try[-1]: break
                     break
-        raise Exception("All attempted Gemini models failed or were not found.")
+        
+        failure_summary = " | ".join(error_details)
+        raise Exception(f"All models failed. Details: {failure_summary}")
 
 class Reporter:
     def __init__(self):
@@ -109,21 +115,24 @@ class Reporter:
 
 読みやすさを重視しつつ、専門用語は適切に使用してください。
 """
+        error_details = []
         for model_name in self.models_to_try:
             for attempt in range(2):
                 try:
                     self.model = genai.GenerativeModel(model_name)
                     response = self.model.generate_content(prompt)
                     return response.text
-                except exceptions.NotFound:
+                except exceptions.NotFound as e:
+                    error_details.append(f"{model_name}: NotFound")
                     break
-                except exceptions.ResourceExhausted:
+                except exceptions.ResourceExhausted as e:
+                    error_details.append(f"{model_name}: Quota")
                     if attempt == 1: break
-                    time.sleep(60)
+                    time.sleep(30)
                 except Exception as e:
-                    if model_name == self.models_to_try[-1]: raise e
+                    error_details.append(f"{model_name}: {str(e)}")
                     break
-        raise Exception("All Gemini models failed for reporting.")
+        raise Exception(f"Reporter failed. Details: {' | '.join(error_details)}")
 
 class Notifier:
     def __init__(self):
@@ -199,17 +208,25 @@ def perform_research_and_notify():
 
 @app.get("/")
 async def health_check():
+    available_models = []
+    try:
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+    except Exception as e:
+        available_models = [f"Error listing: {str(e)}"]
+
     return {
-        "status": "Webhook is running (Vercel-Optimized v2)",
+        "status": "Webhook is running (Diagnostic Mode)",
         "diagnostics": {
             "fastapi": "installed",
-            "python": sys.version,
+            "lib_version": getattr(genai, "__version__", "unknown"),
+            "available_models_count": len(available_models),
+            "first_3_models": available_models[:3],
             "env_status": {
-                "LINE_CHANNEL_ACCESS_TOKEN": "set" if os.getenv("LINE_CHANNEL_ACCESS_TOKEN") else "missing",
-                "LINE_CHANNEL_SECRET": "set" if os.getenv("LINE_CHANNEL_SECRET") else "missing",
-                "LINE_USER_ID": "set" if os.getenv("LINE_USER_ID") else "missing",
-                "TAVILY_API_KEY": "set" if os.getenv("TAVILY_API_KEY") else "missing",
-                "GEMINI_API_KEY": "set" if os.getenv("GEMINI_API_KEY") else "missing"
+                "GEMINI_API_KEY": "set" if os.getenv("GEMINI_API_KEY") else "missing",
+                "LINE_USER_ID": "set" if os.getenv("LINE_USER_ID") else "missing"
             }
         }
     }
