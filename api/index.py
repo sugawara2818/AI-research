@@ -169,6 +169,9 @@ async def cron_trigger(request: Request):
 
 @app.post("/")
 @app.post("/api/index")
+@app.post("/api/webhook")
+@app.post("/api/callback")
+@app.post("/callback")
 async def webhook(request: Request):
     signature = request.headers.get("X-Line-Signature")
     if not signature: raise HTTPException(status_code=400)
