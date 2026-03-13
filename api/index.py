@@ -111,8 +111,9 @@ class NewsReporter:
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         self.model = genai.GenerativeModel("models/gemini-2.5-flash")
 
-    def generate_report(self, facts: str) -> str:
+    def generate_report(self, facts: str, query: Optional[str] = None) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
+        topic_label = f"【テーマ：{query}】" if query else "【AI全般リサーチ】"
         prompt = f"""
 あなたはトップエンジニア向けの技術インテリジェンス・レポートを執筆するシニアアナリストです。
 以下の分析データに基づき、「AI技術インテリジェンス・プロレポート」を作成してください。
@@ -121,13 +122,13 @@ class NewsReporter:
 {facts}
 
 【レポートの構成】
-1. **AI技術インテリジェンス・プロレポート ({current_date})**
-2. **キー・インサイト**: 今日の最重要動向とその背景。
-3. **技術詳細・最新リリース**: 厳選された3つのトピックの深掘り。
-4. **実装・活用のヒント**: エンジニアがどう向き合うべきか。
+1. **AI技術インテリジェンス・プロレポート ({current_date})** {topic_label}
+2. **キー・インサイト**: このテーマ/動向の核心。
+3. **技術詳細・最新情報**: 厳選された要素の深掘り。
+4. **実装・活用のヒント**: 最新のトレンドをどう武器にするか。
 5. **リソース一覧**: GitHub / 公式ページ / Xアカウント等。
 
-挨拶、装飾、一言感想などは「一切不要」です。プロフェッショナルで論理的なMarkdown形式で、高密度な情報を提供してください。
+挨拶、装飾、一言感想などは一切不要。Markdown形式で提供してください。
 """
         return self.model.generate_content(prompt).text
 
@@ -248,14 +249,14 @@ def run_news_flow(target_id: str, query: Optional[str] = None):
     try:
         researcher = NewsResearcher()
         reporter = NewsReporter()
-        results = researcher.search_news(query) if query else researcher.search_news()
-        facts = researcher.filter_and_extract_facts(results)
-        report = reporter.generate_report(facts)
+        results = researcher.search_news(query)
+        facts = researcher.filter_and_extract_facts(results, query)
+        report = reporter.generate_report(facts, query)
         if is_cancelled(target_id): return
         notifier.send_line_notification(report, target_id)
     except Exception as e:
         if not is_cancelled(target_id):
-            notifier.send_line_notification(f"ニュースリサーチ失敗: {str(e)}", target_id)
+            notifier.send_line_notification(f"AIリサーチ失敗: {str(e)}", target_id)
 
 def run_news_consultation(query: str, target_id: str):
     notifier = Notifier()
