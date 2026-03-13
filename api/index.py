@@ -30,8 +30,14 @@ class Researcher:
         self.tavily_key = os.getenv("TAVILY_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=self.gemini_key)
-        # Attempt multiple models in case of 404
-        self.models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]
+        # Use models confirmed by diagnostics
+        self.models_to_try = [
+            "models/gemini-2.0-flash", 
+            "models/gemini-1.5-flash", 
+            "models/gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "gemini-pro"
+        ]
         self.model = genai.GenerativeModel(self.models_to_try[0])
 
     def search_news(self, query: str = "latest AI technology trends and research 2024-2025") -> List[Dict]:
