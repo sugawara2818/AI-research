@@ -113,59 +113,57 @@ class StockResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_stock_news(self, query: str) -> List[Dict]:
-        print(f"Searching stock info for: {query}")
-        # Append .T for Tokyo Stock Exchange if it's a numeric code to avoid hallucination
+        current_date_str = datetime.now().strftime("%Y-%m-%d")
+        print(f"Searching stock info for: {query} (Today: {current_date_str})")
+        
         processed_query = query
         if "銘柄コード" in query:
             code = query.replace("銘柄コード", "").strip()
             processed_query = f"{code}.T {code} 証券コード"
 
+        # Explicitly include the current date in the query to force fresh results
         search_query = (
-            f"{processed_query} 株価 決算短信 業績推移 財務分析 チャート動向 市場ニュース 世界情勢 "
-            f"stock price {processed_query} financial stats analyst ratings technical analysis peer comparison market impacts"
+            f"本日 {current_date_str} の {processed_query} 株価 日経平均 リアルタイム 決算短信 業績推移 "
+            f"latest {current_date_str} {processed_query} stock price nikkei 225 index realtime financial update"
         )
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key,
             "query": search_query,
             "search_depth": "advanced",
-            "max_results": 15 # High density search for precision
+            "max_results": 15
         }
         res = requests.post(url, json=payload)
         res.raise_for_status()
         return res.json().get('results', [])
 
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
+        current_date_str = datetime.now().strftime("%Y年%m月%d日")
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
-あなたは極めて優秀かつ冷徹なシニア・リサーチアナリストです。
-銘柄「{query}」について、以下の検索結果をもとに「超高精度・超詳細な分析」を行なってください。
+あなたは「情報の鮮度」を命として動く、超精密なリサーチアナリストです。
+ターゲット銘柄「{query}」について、以下の最新データをもとに「情報の二重検証（ダブルチェック）」を徹底した分析を行なってください。
 
-【絶対遵守：銘柄の同一性確認】
-検索結果にターゲット以外の銘柄（似たコードや名前）が混じっていることが多々あります。
-必ず「証券コード」と「企業名」を照合し、ターゲット銘柄と確信できる情報のみを抽出してください。混同はプロとして致命的です。
+【本日：{current_date_str}】
+
+【厳守事項：データの鮮度ダブルチェック】
+1. **日付の検証**: 各検索結果のデータが「いつ」のものか必ず確認してください。本日（{current_date_str}）の日経平均や株価データと矛盾がないか照合し、古いデータ（数日・数週間前のもの）を「最新」として扱わないよう二重にチェックしてください。
+2. **情報の整合性**: 日経平均が現在急落/急騰している場合、その背景が本日の事象と合致しているか確認してください。ハルシネーション（情報の捏造）は許されません。
+3. **最新ファクトの優先**: 決算直後の場合、昨日の予想ではなく「本日の着地数値」を死守して抽出してください。
 
 【分析の深化項目】
-1. **財務・決算の詳細分析**: 
-   売上高、営業利益、純利益の直近数値。前年同期比、進捗率。通期予想の上方/下方修正の有無。
-2. **定量的評価データの収集**: 
-   PER、PBR、ROE、配当利回り、自己資本比率の具体的数値。業界平均や過去平均との比較。
-3. **テクニカル・需給状況の診断**: 
-   現在のチャート形状、支持線・抵抗線。移動平均線との乖離率。出来高の推移、信用買い残・売り残の状況。
-4. **マクロ・外部環境の波及経路**: 
-   今、世界のどこで起きている「何（金利、為替、紛争、政策等）」が、この企業のサプライチェーンや最終利益にどうヒットするのかを具体的に特定してください。
-5. **情報の峻別**: 
-   些末なニュースは捨て、株価のメインドライバー（材料）を1〜2点に絞り込んで深掘りしてください。
+- **財務・指標**: 直近の数値推移と、本日時点でのPER/PBR等の正確な算出。
+- **市場・世界情勢の連動**: 今、この瞬間に動いている材料（為替、金利、地政学リスク）がどう銘柄にヒットしているか。
+- **需給・テクニカル**: 本日の出来高、出来高変化、昨晩のPTS動向など。
 
-【5段階評価の準備】
-「成長性」「収益性」「安全性」「割安性」「外部環境耐性」の5項目を★で表すための具体的根拠を、検索結果から漏れなく抽出してください。
+挨拶は不要です。今日という日付に100%立脚した、純度の高いインテリジェンスのみを出力してください。
 """
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception("Stock分析フェーズで、情報抽出に失敗しました。")
+        raise Exception(f"分析フェーズで失敗しました。本日({current_date_str})の情報の取得に問題があります。")
 
 class StockReporter:
     def __init__(self):
