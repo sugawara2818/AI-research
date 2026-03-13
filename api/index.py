@@ -3,15 +3,9 @@ from fastapi import FastAPI, Request, HTTPException
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import sys
-import os
-
-# Add root directory to sys.path for Vercel
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from researcher import Researcher
-from reporter import Reporter
-from notifier import Notifier
+from .researcher import Researcher
+from .reporter import Reporter
+from .notifier import Notifier
 
 app = FastAPI()
 

@@ -1,5 +1,8 @@
 .env
 __pycache__/
+.venv/
+venv/
+.vercel/
 *.txt
 test_line.py
 list_models.py
