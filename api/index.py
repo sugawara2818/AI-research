@@ -108,13 +108,26 @@ class StockResearcher:
 
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
-        prompt = f"株式アナリストとして銘柄「{query}」の重要情報を分析してください。決算や株価要因、指標(PER等)を鋭く抽出してください。\n\n【詳細】\n{context}"
+        prompt = f"""
+あなたは百戦錬磨のシニア株式アナリストです。以下の最新の検索結果から、銘柄「{query}」に関する重要情報を技術的・財務的な観点から鋭く分析し、要点を抽出してください。
+
+【検索結果】
+{context}
+
+【分析の要件】
+1. **直近の業績・決算**: 売上、利益、進捗率、会社予想との乖離など。
+2. **株価変動の主因**: ポジティブな材料（新製品、提携、好決算）とネガティブな材料（コスト増、市況悪化、下方修正）。
+3. **ファンダメンタルズ/指標**: 表明されているPER、PBR、配当利回り、時価総額などの具体的な数値。
+4. **テクニカル/市場環境**: 需給、移動平均との乖離、競合他社との比較、セクター全体の強弱。
+
+余計な挨拶は一切不要です。プロ仕様の箇条書きで、事実に基づいた高密度の情報を出力してください。
+"""
         for model_name in self.models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
             except: continue
-        raise Exception("Stock analysis failed.")
+        raise Exception("Stock分析フェーズでエラーが発生しました。")
 
 class StockReporter:
     def __init__(self):
@@ -123,7 +136,23 @@ class StockReporter:
 
     def generate_stock_report(self, insights: str, query: str) -> str:
         current_date = datetime.now().strftime("%Y年%m月%d日")
-        prompt = f"投資顧問会社のシニアアナリストとして銘柄「{query}」の調査報告書({current_date})を作成してください。リスクとチャンスを論理的に整理してください。\n\n【分析】\n{insights}"
+        prompt = f"""
+あなたは機関投資家向けの調査報告書を作成するシニア・エクイティ・アナリストです。
+以下の分析データをもとに、銘柄「{query}」の「株式調査レポート」を完成させてください。
+
+【分析データ】
+{insights}
+
+【レポートの構成案】
+1. **【{query}】 株式調査レポート ({current_date})**
+2. **エグゼクティブ・サマリー**: 今、この銘柄で何が起きているのか？（3行以内）
+3. **重点分析項目**: 業績、材料、財務状況、市場ポジションの深掘り。
+4. **リスクとチャンス**: 投資家が考慮すべき上値余地と底値リスク。
+5. **結論・考察**: 今後の株価の見通しについての論理的な展望。
+6. **リソース・ソース**: 参考URLや関連トピックの紹介。
+
+読みやすさと格調高さを両立させ、エンジニアや投資家も納得する論理的な構成にしてください。Markdown形式で出力してください。
+"""
         return self.model.generate_content(prompt).text
 
 class InvestmentConsultant:
