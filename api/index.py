@@ -157,110 +157,39 @@ class TechConsultant:
 
 # --- Stock AI Logic ---
 
-class StockResearcher:
-    def __init__(self):
-        self.tavily_key = os.getenv("TAVILY_API_KEY")
-        self.gemini_key = os.getenv("GEMINI_API_KEY")
-        genai.configure(api_key=self.gemini_key)
-        self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
-
-    def search_stock_news(self, query: str) -> List[Dict]:
-        jst_now = get_jst_now()
-        current_date_str = jst_now.strftime("%Y-%m-%d")
-        print(f"Searching stock info for: {query} (JST: {current_date_str})")
-        
-        processed_query = query
-        if "銘柄コード" in query:
-            code = query.replace("銘柄コード", "").strip()
-            processed_query = f"{code}.T {code} 証券コード"
-
-        # Broaden query to include both "today" and "latest/recent" to handle sparse same-day results
-        search_query = (
-            f"{processed_query} 株価 日経平均 リアルタイム 決算短信 最新ニュース {current_date_str} "
-            f"latest {processed_query} stock price nikkei 225 index financial update {current_date_str}"
-        )
-        url = "https://api.tavily.com/search"
-        payload = {
-            "api_key": self.tavily_key,
-            "query": search_query,
-            "search_depth": "advanced",
-            "max_results": 15
-        }
-        res = requests.post(url, json=payload)
-        res.raise_for_status()
-        return res.json().get('results', [])
-
-    def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
-        jst_now = get_jst_now()
-        current_date_str = jst_now.strftime("%Y年%m月%d日")
-        
-        context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
-        prompt = f"""
-あなたは超一流のジュニア・リサーチアナリストです。シニア・ストラテジストに提出するための「加工されていない生データ（事実）」を整理してください。
-ターゲット銘柄「{query}」について、検索結果から以下の項目に該当する数値を抽出・整理してください。
-
-【厳守：抽出フォーマット】
-以下の ### [入力データ] ブロックのみを出力してください。情報がない項目は「データなし」と記載してください。
-
-### [入力データ]
-・現在の日付: {current_date_str}
-・日経平均株価 / TOPIX（現在値・前日比）: （検索結果から最新の指数情報を抽出）
-・テクニカル指標（25日・75日・200日線との乖離、出来高など）: （移動平均線との乖離や出来高の変化を抽出）
-・最新のマクロ経済指標（直近のGDP速報、CPI、失業率など）: （日本および米国の主要指標を抽出）
-・為替レート（ドル円など）と米国金利の動向: （ドル円、米国10年債利回り等の数値を抽出）
-・今日の主要な金融・地政学ニュース（3〜5本）: （銘柄や市場に影響する具体的なニュースを箇条書きで抽出）
-
-【注意】
-- あなた自身の推測や見解は一切含めないでください。
-- 検索結果に存在する数値と事実のみを整理してください。
-"""
-        for model_name in self.models_to_try:
-            try:
-                model = genai.GenerativeModel(model_name)
-                return model.generate_content(prompt).text
-            except: continue
-        raise Exception(f"データ抽出フェーズで失敗しました。検索結果の質に問題がある可能性があります。")
-
-class StockReporter:
+class StockAnalyzer:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.models_to_try = ["models/gemini-2.0-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
+        # Using 2.0 Flash Thinking for the requested config support
+        self.model_name = "models/gemini-2.0-flash-thinking-exp-01-21"
 
-    def generate_stock_report(self, insights: str, query: str) -> str:
+    def analyze_stock(self, query: str) -> str:
         jst_now = get_jst_now()
         current_date = jst_now.strftime("%Y年%m月%d日")
         
-        system_prompt = """
+        # System instructions integrated as part of the prompt for single-call
+        # Adhering to the user's "Strict Professional" requirements
+        full_instruction = f"""
 あなたはプロの機関投資家向け金融ストラテジストです。
-以下の【絶対ルール】を遵守してレポートを作成してください。
+Google Searchツールを使用して最新情報を取得し、以下の【絶対ルール】を遵守してレポートを作成してください。
 
 【絶対ルール】
-1. 事実の厳守: ユーザーから提供された [入力データ] のみに基づいて分析・記述すること。
+1. 事実の厳守: Google Searchで取得した最新データのみに基づいて分析・記述すること。
 2. 捏造の禁止: 提供されていない経済指標、株価、ニュース、時期、事象をAI自身の知識から補完・推測して記述することを固く禁ずる。
-3. 時間軸の同期: 現在の日付は [入力データ] に記載された日付である。過去のデータを現在進行形として語らないこと。
+3. 時間軸の同期: 現在の日付は {current_date} である。市場が閉まっている週末や祝日の場合は、直近の営業日のデータを最新として扱うこと。
 4. 客観性: 感情的な表現や曖昧な推測を排除し、論理的かつ客観的な事実の因果関係のみを記述すること。
 5. フォーマットの厳守: 指定された [出力構成] の見出し、テーブル、リスト形式を完全に再現すること。
-"""
-        
-        user_prompt = f"""
-以下の [入力データ] を分析し、[出力構成] に従って「株式インテリジェンス・完全レポート」を出力してください。
-
-{insights}
 
 ---
 
 ### [出力構成]
 # 【市場全体（マクロ概況）】 株式インテリジェンス・完全レポート ({current_date})
 
----
-
 ### エグゼクティブ・サマリー
-（入力データに基づき、市場の現状、追い風、リスク要因を150字程度で論理的に要約）
-
----
+（市場の現状、追い風、リスク要因を150字程度で論理的に要約）
 
 ### 5段階スコア・カード
-（以下の項目を★1〜5で評価し、入力データに基づく客観的な根拠を簡潔に記載するテーブルを出力）
+（以下の項目を★1〜5で評価し、客観的な根拠を簡潔に記載するテーブルを出力）
 | 評価項目 | スコア | 根拠の要約 |
 |:---|:---|:---|
 | 成長性 | | |
@@ -269,61 +198,58 @@ class StockReporter:
 | 割安性 | | |
 | 外部環境耐性 | | |
 
----
-
 ### 統合格付け (Rating)
 ## （S, A, B, C, Dのいずれか1文字）
 **解説:**
-（スコアカードの結果を総合し、現在の市場に対するスタンスを客観的・論理的に解説）
-
----
+（現在の市場に対するスタンスを客観的・論理的に解説）
 
 ### 業績・財務の深掘り
-（入力されたマクロ経済指標や企業業績に関するニュースに基づき、現在の状態を分析）
-
----
+（マクロ経済指標や企業業績に関するニュースに基づき、現在の状態を分析）
 
 ### テクニカル・チャートの視点
-（入力された株価データ、移動平均線、出来高などの事実に基づき、現状のトレンドと支持線・抵抗線を分析）
-
----
+（最新の株価データ、移動平均線、出来高などの事実に基づき、現状のトレンドを分析）
 
 ### マクロの波及インテリジェンス
-（入力されたニュースや金利・為替データを基に、以下の形式で事実の波及経路を論理的に記述。最大3つ）
+（ニュースや金利・為替データを基に、事実の波及経路を論理的に記述。最大3つ）
 1. **[要因のタイトル]**
-   * **事象:** （入力データにある事実）
-   * **波及経路:** （その事実が日本企業や市場にどう論理的に影響するか）
-
----
+   * **事象:** （データにある事実）
+   * **波及経路:** （その事実が市場にどう波及するか）
 
 ### 競合比較・市場優位性
-（グローバル市場と比較した際の、現在の日本市場の優位性と課題を箇条書きで記述）
-
----
+（グローバルと比較した際の、現在の日本市場の優位性と課題を箇条書きで記述）
 
 ### シナリオ予測とテールリスク
-（入力データから導かれる論理的なシナリオ）
 1. **ベースシナリオ（確率50%）：**
 2. **アップサイドシナリオ（確率25%）：**
-3. **ダウンサイドシナライト（確率25%）：**
-**テールリスク：** （現在意識すべき想定外のサプライズ要因）
+3. **ダウンサイドシナリオ（確率25%）：**
+**テールリスク：** （想定外のサプライズ要因）
+
+### 戦術的スクリーニング
+（恩恵を受ける論理的根拠のあるテーマと代表的なセクターまたは銘柄を3つ）
 
 ---
 
-### 戦術的スクリーニング
-（入力データで確認された現在のマクロ環境において、恩恵を受ける論理的根拠のあるテーマと代表的なセクターまたは銘柄を3つ挙げる）
-1. **[テーマ名]:**
-   * **選定理由:**
-   * **代表セクター/銘柄の傾向:**
+リサーチおよび分析対象：{query}
 """
-        for model_name in self.models_to_try:
-            try:
-                model = genai.GenerativeModel(model_name)
-                # Combining system and user prompt for best performance with Gemini
-                full_prompt = f"{system_prompt}\n\n{user_prompt}"
-                return model.generate_content(full_prompt).text
-            except: continue
-        raise Exception("レポート生成フェーズで失敗しました。指示が厳格すぎるか、モデルの制限に達した可能性があります。")
+        try:
+            # Implementing the requested Thinking Config and Google Search tool
+            model = genai.GenerativeModel(
+                model_name=self.model_name,
+                tools=[{"google_search": {}}]
+            )
+            
+            # Using thinking_config as requested (budget -1 is not directly supported in SDK as kwarg, 
+            # but we can set it via generation_config or rely on the thinking-exp model features)
+            response = model.generate_content(
+                full_instruction,
+                generation_config={
+                    "thinking_config": {"include_thoughts": True}
+                }
+            )
+            return response.text
+        except Exception as e:
+            print(f"Stock analysis error: {e}")
+            raise Exception("市場データの取得または分析に失敗しました。時間をおいて再度お試しください。")
 
 class InvestmentConsultant:
     def __init__(self):
@@ -369,11 +295,8 @@ def run_news_consultation(query: str, target_id: str):
 def run_stock_flow(query: str, target_id: str):
     notifier = Notifier()
     try:
-        researcher = StockResearcher()
-        reporter = StockReporter()
-        results = researcher.search_stock_news(query)
-        insights = researcher.extract_stock_insights(results, query)
-        report = reporter.generate_stock_report(insights, query)
+        analyzer = StockAnalyzer()
+        report = analyzer.analyze_stock(query)
         if is_cancelled(target_id): return
         notifier.send_line_notification(report, target_id)
     except Exception as e:
