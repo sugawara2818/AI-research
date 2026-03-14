@@ -3,7 +3,7 @@ import time
 import json
 import sys
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
@@ -28,6 +28,9 @@ except ImportError:
 app = FastAPI()
 
 # --- Shared Utilities ---
+
+def get_jst_now():
+    return datetime.now(timezone(timedelta(hours=9)))
 
 CANCEL_LOG = {} # {user_id: timestamp_of_cancel}
 
@@ -68,9 +71,10 @@ class NewsResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_news(self, query: Optional[str] = None) -> List[Dict]:
+        jst_now = get_jst_now()
         base_query = query if query else "latest AI technology trends and research 2024-2025"
         # Broaden search to recent trends (weekly/recent)
-        search_query = f"latest AI tools models research releases this week {base_query}"
+        search_query = f"latest AI tools models research releases this week {base_query} {jst_now.strftime('%Y-%m-%d')}"
         url = "https://api.tavily.com/search"
         payload = {
             "api_key": self.tavily_key, 
@@ -83,7 +87,7 @@ class NewsResearcher:
         return res.json().get('results', [])
 
     def filter_and_extract_facts(self, search_results: List[Dict], query: Optional[str] = None) -> str:
-        current_date_str = datetime.now().strftime("%Y年%m月%d日")
+        current_date_str = get_jst_now().strftime("%Y年%m月%d日")
         topic_label = f"「{query}」" if query else "全般"
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
@@ -112,7 +116,7 @@ class NewsReporter:
         self.model = genai.GenerativeModel("models/gemini-2.5-flash")
 
     def generate_report(self, facts: str, query: Optional[str] = None) -> str:
-        current_date = datetime.now().strftime("%Y年%m月%d日")
+        current_date = get_jst_now().strftime("%Y年%m月%d日")
         topic_label = f"【テーマ：{query}】" if query else "【AI全般リサーチ】"
         prompt = f"""
 あなたはトップエンジニア向けの技術インテリジェンス・レポートを執筆するシニアアナリストです。
@@ -151,8 +155,9 @@ class StockResearcher:
         self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def search_stock_news(self, query: str) -> List[Dict]:
-        current_date_str = datetime.now().strftime("%Y-%m-%d")
-        print(f"Searching stock info for: {query} (Today: {current_date_str})")
+        jst_now = get_jst_now()
+        current_date_str = jst_now.strftime("%Y-%m-%d")
+        print(f"Searching stock info for: {query} (JST: {current_date_str})")
         
         processed_query = query
         if "銘柄コード" in query:
@@ -176,21 +181,21 @@ class StockResearcher:
         return res.json().get('results', [])
 
     def extract_stock_insights(self, search_results: List[Dict], query: str) -> str:
-        current_date_str = datetime.now().strftime("%Y年%m月%d日")
+        jst_now = get_jst_now()
+        current_date_str = jst_now.strftime("%Y年%m月%d日")
+        day_of_week = ["月", "火", "水", "木", "金", "土", "日"][jst_now.weekday()]
+        
         context = "\n\n".join([f"Source: {r['url']}\nContent: {r['content']}" for r in search_results])
         prompt = f"""
 あなたは情報の鮮度と正確性に命を懸ける、伝説的なリサーチアナリストです。
 銘柄「{query}」について、以下のデータをもとに情報の「二重検証（ダブルチェック）」を行なってください。
 
-【本日：{current_date_str}】
+【基準日（日本時間）：{current_date_str}（{day_of_week}）】
 
-【分析・検証の指針】
-1. **鮮度の検証**: 本日（{current_date_str}）のデータが理想ですが、もし本日の詳細なニュースがまだ十分にない場合は、直近（ここ数日〜数週間）の最も新しい情報を「最新」として分析してください。
-2. **日付の明示**: 採用したデータが「いつ（何日前）」のものか、可能な限り把握し、本日時点での影響を推測・補完してください（例：昨日の終値ベース、直近の決算ベース等）。
-3. **情報の整合性**: 日経平均や市場全体の動きが本日の状況と合致しているか確認し、矛盾がある場合はその旨を冷静に指摘してください。捏造（ハルシネーション）は厳禁です。
-4. **核心の抽出**: 些末な動きではなく、株価のメインドライバーを特定してください。
-
-生きたインテリジェンスのみを、高密度に出力してください。
+【最重要：分析・検証の指針】
+1. **週末/祝日の考慮**: 今日は{day_of_week}曜です。市場が閉まっている場合は、直近の営業日（例：金曜日の終値）や最新の出来事を「最新」として扱ってください。
+2. **鮮度の検証**: 本日（{current_date_str}）に関する実質的なニュースがまだない、あるいは市場が動いていない場合は、直近（ここ数日〜数週間）の最も新しい情報を優先し、「本日時点での状況」として整理してください。
+3. **公正な分析**: 検索結果が古い場合はその旨を明記し、ハルシネーション（情報の捏造）を避けてください。
 """
         for model_name in self.models_to_try:
             try:
@@ -205,7 +210,7 @@ class StockReporter:
         self.model = genai.GenerativeModel("models/gemini-2.5-flash")
 
     def generate_stock_report(self, insights: str, query: str) -> str:
-        current_date = datetime.now().strftime("%Y年%m月%d日")
+        current_date = get_jst_now().strftime("%Y年%m月%d日")
         prompt = f"""
 あなたは機関投資家が「最終判断の根拠」とする、最高峰の株式インテリジェンス・レポートを執筆するアナリストです。
 以下の分析データに基づき、銘柄「{query}」の「株式インテリジェンス・完全レポート」を完成させてください。
@@ -400,7 +405,7 @@ async def stock_webhook(request: Request, background_tasks: BackgroundTasks):
 
 @app.get("/")
 async def health():
-    return {"status": "Universal AI Bot v10 (Precision Mode) is running."}
+    return {"status": "Universal AI Bot v11 (Live Multi-Check) is running.", "server_time": str(datetime.now())}
 
 @app.get("/cron")
 @app.get("/api/index/cron")
