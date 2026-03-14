@@ -113,7 +113,7 @@ class NewsResearcher:
 class NewsReporter:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("models/gemini-2.5-flash")
+        self.models_to_try = ["models/gemini-2.0-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def generate_report(self, facts: str, query: Optional[str] = None) -> str:
         current_date = get_jst_now().strftime("%Y年%m月%d日")
@@ -134,16 +134,26 @@ class NewsReporter:
 
 挨拶、装飾、一言感想などは一切不要。Markdown形式で提供してください。
 """
-        return self.model.generate_content(prompt).text
+        for model_name in self.models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                return model.generate_content(prompt).text
+            except: continue
+        raise Exception("AIレポート生成に失敗しました。")
 
 class TechConsultant:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("models/gemini-2.5-flash")
+        self.models_to_try = ["models/gemini-2.0-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def provide_advice(self, query: str) -> str:
         prompt = f"ITソリューションアーキテクトとして具体的な技術スタックや開発の第一歩をアドバイスしてください。\n\n【相談】\n{query}"
-        return self.model.generate_content(prompt).text
+        for model_name in self.models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                return model.generate_content(prompt).text
+            except: continue
+        raise Exception("技術相談に失敗しました。")
 
 # --- Stock AI Logic ---
 
@@ -214,7 +224,7 @@ class StockResearcher:
 class StockReporter:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("models/gemini-2.5-flash")
+        self.models_to_try = ["models/gemini-2.0-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def generate_stock_report(self, insights: str, query: str) -> str:
         jst_now = get_jst_now()
@@ -318,11 +328,16 @@ class StockReporter:
 class InvestmentConsultant:
     def __init__(self):
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model = genai.GenerativeModel("models/gemini-2.5-flash")
+        self.models_to_try = ["models/gemini-2.0-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
 
     def provide_advice(self, query: str) -> str:
         prompt = f"ファイナンシャル・アドバイザーとして投資のアドバイスをしてください。推奨セクターや指標、リスク管理を多角的に答えてください。\n\n【相談】\n{query}"
-        return self.model.generate_content(prompt).text
+        for model_name in self.models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                return model.generate_content(prompt).text
+            except: continue
+        raise Exception("投資相談に失敗しました。")
 
 # --- Orchestration ---
 
