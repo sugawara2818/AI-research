@@ -229,33 +229,35 @@ Google Searchツールを使用して最新情報を取得し、以下の【絶�
 
 リサーチおよび分析対象：{query}
 """
-        models_to_try = [
-            "models/gemini-2.0-flash-thinking-exp-01-21",
-            "models/gemini-2.0-flash-exp",
-            "models/gemini-1.5-flash",
-            "models/gemini-flash-latest"
+        # Mapping correct tool syntaxes to models to avoid quota exhaustion from blind retries
+        configs_to_try = [
+            {"m": "models/gemini-2.0-flash-thinking-exp-01-21", "t": "google_search", "think": True},
+            {"m": "models/gemini-2.0-flash-exp", "t": "google_search", "think": False},
+            {"m": "models/gemini-1.5-flash", "t": "google_search_retrieval", "think": False},
+            {"m": "models/gemini-flash-latest", "t": "google_search_retrieval", "think": False}
         ]
-        tool_keys = ["google_search", "google_search_retrieval"]
         
         last_error = "初期化失敗"
-        for model_name in models_to_try:
-            for tool_key in tool_keys:
-                try:
-                    model = genai.GenerativeModel(
-                        model_name=model_name,
-                        tools=[{tool_key: {}}]
-                    )
-                    gen_config = {}
-                    # Only apply thinking_config if the model name suggests it
-                    if "thinking" in model_name:
-                        gen_config["thinking_config"] = {"include_thoughts": True}
-                    
-                    response = model.generate_content(full_instruction, generation_config=gen_config)
-                    return response.text
-                except Exception as e:
-                    last_error = f"{model_name} ({tool_key}): {str(e)}"
-                    print(f"Trial failed: {last_error}")
-                    continue
+        for cfg in configs_to_try:
+            try:
+                model = genai.GenerativeModel(
+                    model_name=cfg["m"],
+                    tools=[{cfg["t"]: {}}]
+                )
+                gen_config = {}
+                if cfg["think"]:
+                    gen_config["thinking_config"] = {"include_thoughts": True}
+                
+                response = model.generate_content(full_instruction, generation_config=gen_config)
+                return response.text
+            except Exception as e:
+                err_msg = str(e)
+                last_error = f"{cfg['m']}: {err_msg}"
+                print(f"Trial failed: {last_error}")
+                # If hit 429, don't immediately blast more calls, unless it's the last standard model
+                if "429" in err_msg and cfg["m"] != "models/gemini-1.5-flash":
+                    time.sleep(1) # Small pause for rate limit recovery
+                continue
         
         # Final attempt without any tools if all else fails (as last resort)
         try:
