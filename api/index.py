@@ -68,7 +68,7 @@ class NewsResearcher:
         self.tavily_key = os.getenv("TAVILY_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
         genai.configure(api_key=self.gemini_key)
-        self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash"]
+        self.models_to_try = ["models/gemini-2.5-flash", "models/gemini-2.0-flash", "models/gemini-1.5-flash", "models/gemini-flash-latest"]
 
     def search_news(self, query: Optional[str] = None) -> List[Dict]:
         jst_now = get_jst_now()
@@ -107,8 +107,12 @@ class NewsResearcher:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
-            except: continue
-        raise Exception(f"AIリサーチフェーズで失敗しました。最新の情報を取得できません。")
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg:
+                    time.sleep(2)
+                continue
+        raise Exception(f"AIリサーチフェーズで失敗しました。最新の情報を取得できません。原因: {err_msg if 'err_msg' in locals() else '不明'}")
 
 class NewsReporter:
     def __init__(self):
@@ -138,7 +142,10 @@ class NewsReporter:
             try:
                 model = genai.GenerativeModel(model_name)
                 return model.generate_content(prompt).text
-            except: continue
+            except Exception as e:
+                if "429" in str(e):
+                    time.sleep(2)
+                continue
         raise Exception("AIレポート生成に失敗しました。")
 
 class TechConsultant:
@@ -230,9 +237,12 @@ Google Searchツールを使用して最新情報を取得し、以下の【絶�
 リサーチおよび分析対象：{query}
 """
         # Mapping correct tool syntaxes to models to avoid quota exhaustion from blind retries
+        # Mapping correct tool syntaxes to models
         configs_to_try = [
-            {"m": "models/gemini-2.0-flash-thinking-exp-01-21", "t": "google_search", "think": True},
-            {"m": "models/gemini-2.0-flash-exp", "t": "google_search", "think": False},
+            {"m": "models/gemini-2.5-flash", "t": "google_search", "think": False},
+            {"m": "models/gemini-2.5-flash", "t": "google_search_retrieval", "think": False},
+            {"m": "models/gemini-2.0-flash", "t": "google_search", "think": False},
+            {"m": "models/gemini-2.0-flash", "t": "google_search_retrieval", "think": False},
             {"m": "models/gemini-1.5-flash", "t": "google_search_retrieval", "think": False},
             {"m": "models/gemini-flash-latest", "t": "google_search_retrieval", "think": False}
         ]
@@ -240,30 +250,31 @@ Google Searchツールを使用して最新情報を取得し、以下の【絶�
         last_error = "初期化失敗"
         for cfg in configs_to_try:
             try:
+                # Some models/SDK versions prefer dict, some Tool objects. 
+                # Given legacy SDK, we try the most compatible dict format first.
                 model = genai.GenerativeModel(
                     model_name=cfg["m"],
                     tools=[{cfg["t"]: {}}]
                 )
                 gen_config = {}
-                if cfg["think"]:
+                if cfg.get("think"):
                     gen_config["thinking_config"] = {"include_thoughts": True}
                 
                 response = model.generate_content(full_instruction, generation_config=gen_config)
                 return response.text
             except Exception as e:
                 err_msg = str(e)
-                last_error = f"{cfg['m']}: {err_msg}"
+                last_error = f"{cfg['m']} ({cfg['t']}): {err_msg}"
                 print(f"Trial failed: {last_error}")
-                # If hit 429, don't immediately blast more calls, unless it's the last standard model
-                if "429" in err_msg and cfg["m"] != "models/gemini-1.5-flash":
-                    time.sleep(1) # Small pause for rate limit recovery
+                if "429" in err_msg:
+                    time.sleep(3) # Aggressive wait for stock as it's more likely to hit limits
                 continue
         
-        # Final attempt without any tools if all else fails (as last resort)
+        # Final attempt without any tools if all else fails
         try:
-            model = genai.GenerativeModel("models/gemini-1.5-flash")
+            model = genai.GenerativeModel("models/gemini-2.5-flash") # Use 2.5-flash as default fallback
             return model.generate_content(full_instruction).text
-        except:
+        except Exception as e:
             raise Exception(f"全構成で失敗しました。最新エラー: {last_error}")
 
 class InvestmentConsultant:
